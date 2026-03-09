@@ -2,6 +2,7 @@ const {
   Client,
   GatewayIntentBits,
 } = require("discord.js");
+const http = require("http");
 const { config, assertConfig } = require("./config");
 const { getCommandPayload } = require("./discord/commands");
 const { registerCommands } = require("./discord/registerCommands");
@@ -23,6 +24,21 @@ const aiPromptService = new AIPromptService({
 const promptEngine = new PromptEngine({
   aiPromptService,
   recentHistoryLimit: 180,
+});
+
+const port = Number(process.env.PORT || 10000);
+
+http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("ok");
+    return;
+  }
+
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("alive");
+}).listen(port, "0.0.0.0", () => {
+  console.log(`Health server listening on ${port}`);
 });
 
 async function handleTruthOrDareCommand(interaction) {
