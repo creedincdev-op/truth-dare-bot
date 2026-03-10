@@ -27,12 +27,75 @@ const promptEngine = new PromptEngine({
 });
 
 const port = Number(process.env.PORT || 10000);
+const runtimeState = {
+  phase: "booting",
+  lastError: null,
+  restStatus: null,
+  gatewayStatus: null,
+  clientIdMatches: null,
+  botId: null,
+};
+
+async function readJson(response) {
+  const text = await response.text();
+
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return text;
+  }
+}
+
+async function validateDiscordApi() {
+  runtimeState.phase = "validating_discord_api";
+  runtimeState.lastError = null;
+  console.log("Validating Discord REST API access...");
+
+  const headers = {
+    Authorization: `Bot ${config.discordToken}`,
+  };
+
+  const meResponse = await fetch("https://discord.com/api/v10/users/@me", {
+    headers,
+  });
+  const meBody = await readJson(meResponse);
+  runtimeState.restStatus = meResponse.status;
+
+  if (!meResponse.ok) {
+    throw new Error(`Discord REST validation failed with status ${meResponse.status}`);
+  }
+
+  runtimeState.botId = meBody.id || null;
+  runtimeState.clientIdMatches = Boolean(meBody.id && meBody.id === config.discordClientId);
+  console.log(`Discord REST token validated for bot ${meBody.username} (${meBody.id}).`);
+
+  if (!runtimeState.clientIdMatches) {
+    throw new Error("DISCORD_CLIENT_ID does not match the bot user id for DISCORD_TOKEN");
+  }
+
+  const gatewayResponse = await fetch("https://discord.com/api/v10/gateway/bot", {
+    headers,
+  });
+  runtimeState.gatewayStatus = gatewayResponse.status;
+
+  if (!gatewayResponse.ok) {
+    throw new Error(`Discord gateway probe failed with status ${gatewayResponse.status}`);
+  }
+
+  console.log("Discord gateway endpoint reachable.");
+}
 
 http.createServer((req, res) => {
   const discordReady = client.isReady();
   const payload = {
     discordReady,
     botUser: client.user ? client.user.tag : null,
+    phase: runtimeState.phase,
+    lastError: runtimeState.lastError,
+    restStatus: runtimeState.restStatus,
+    gatewayStatus: runtimeState.gatewayStatus,
+    clientIdMatches: runtimeState.clientIdMatches,
+    botId: runtimeState.botId,
     uptimeSeconds: Math.floor(process.uptime()),
   };
 
@@ -102,6 +165,7 @@ async function handleButton(interaction) {
 }
 
 client.once("ready", async () => {
+  runtimeState.phase = "discord_ready";
   console.log(`Logged in as ${client.user.tag}`);
   console.log(`Prompt pool loaded: ${promptEngine.getCounts().truth} truths, ${promptEngine.getCounts().dare} dares.`);
 
@@ -121,10 +185,14 @@ client.once("ready", async () => {
 });
 
 client.on("error", (error) => {
+  runtimeState.phase = "discord_client_error";
+  runtimeState.lastError = error.message;
   console.error("Discord client error:", error);
 });
 
 client.on("shardError", (error) => {
+  runtimeState.phase = "discord_shard_error";
+  runtimeState.lastError = error.message;
   console.error("Discord shard error:", error);
 });
 
@@ -162,11 +230,14 @@ client.on("interactionCreate", async (interaction) => {
 
 async function start() {
   try {
+    await validateDiscordApi();
+    runtimeState.phase = "connecting_gateway";
     console.log("Connecting to Discord gateway...");
     await client.login(config.discordToken);
   } catch (error) {
+    runtimeState.phase = "discord_start_failed";
+    runtimeState.lastError = error.message;
     console.error("Discord login failed:", error);
-    process.exit(1);
   }
 }
 
