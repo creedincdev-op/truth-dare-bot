@@ -33,6 +33,7 @@ const runtimeState = {
   loginStartedAt: null,
 };
 let recoveryTimer = null;
+let hasEverBeenReady = false;
 
 function clearRecoveryTimer() {
   if (recoveryTimer) {
@@ -70,13 +71,13 @@ http.createServer((req, res) => {
     uptimeSeconds: Math.floor(process.uptime()),
   };
 
-  if (req.url === "/ping") {
+  if (req.url === "/ping" || req.url === "/healthz") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true, uptimeSeconds: payload.uptimeSeconds }));
     return;
   }
 
-  if (req.url === "/health") {
+  if (req.url === "/health" || req.url === "/readyz") {
     res.writeHead(discordReady ? 200 : 503, { "Content-Type": "application/json" });
     res.end(JSON.stringify(payload));
     return;
@@ -142,6 +143,7 @@ async function handleButton(interaction) {
 }
 
 client.once("ready", async () => {
+  hasEverBeenReady = true;
   runtimeState.phase = "discord_ready";
   runtimeState.lastError = null;
   clearRecoveryTimer();
@@ -173,14 +175,18 @@ client.on("shardError", (error) => {
   runtimeState.phase = "discord_shard_error";
   runtimeState.lastError = error.message;
   console.error("Discord shard error:", error);
-  scheduleRecovery(`Discord shard error: ${error.message}`, 45000);
+  if (hasEverBeenReady) {
+    scheduleRecovery(`Discord shard error: ${error.message}`, 180000);
+  }
 });
 
 client.on("shardDisconnect", (event, shardId) => {
   runtimeState.phase = "discord_disconnected";
   runtimeState.lastError = `Shard ${shardId} disconnected with code ${event.code}`;
   console.error(`Discord shard ${shardId} disconnected with code ${event.code}.`);
-  scheduleRecovery(runtimeState.lastError, 45000);
+  if (hasEverBeenReady) {
+    scheduleRecovery(runtimeState.lastError, 180000);
+  }
 });
 
 client.on("shardReconnecting", (shardId) => {
@@ -241,7 +247,7 @@ async function start() {
     runtimeState.loginStartedAt = new Date().toISOString();
     runtimeState.lastError = null;
     console.log("Connecting to Discord gateway...");
-    scheduleRecovery("Discord gateway connection has not reached ready yet", 60000);
+    scheduleRecovery("Discord gateway connection has not reached ready yet", 240000);
 
     await client.login(config.discordToken);
   } catch (error) {
