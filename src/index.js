@@ -32,6 +32,32 @@ const runtimeState = {
   lastError: null,
   loginStartedAt: null,
 };
+let recoveryTimer = null;
+
+function clearRecoveryTimer() {
+  if (recoveryTimer) {
+    clearTimeout(recoveryTimer);
+    recoveryTimer = null;
+  }
+}
+
+function scheduleRecovery(reason, delayMs) {
+  runtimeState.lastError = reason;
+
+  if (recoveryTimer) {
+    return;
+  }
+
+  console.error(`${reason}. Restarting process in ${Math.round(delayMs / 1000)}s if Discord does not recover.`);
+  recoveryTimer = setTimeout(() => {
+    if (!client.isReady()) {
+      console.error(`Recovery timeout reached: ${reason}. Exiting for Render restart.`);
+      process.exit(1);
+    }
+
+    clearRecoveryTimer();
+  }, delayMs);
+}
 
 http.createServer((req, res) => {
   const discordReady = client.isReady();
@@ -118,6 +144,7 @@ async function handleButton(interaction) {
 client.once("ready", async () => {
   runtimeState.phase = "discord_ready";
   runtimeState.lastError = null;
+  clearRecoveryTimer();
   console.log(`Logged in as ${client.user.tag}`);
   console.log(`Prompt pool loaded: ${promptEngine.getCounts().truth} truths, ${promptEngine.getCounts().dare} dares.`);
 
@@ -146,12 +173,34 @@ client.on("shardError", (error) => {
   runtimeState.phase = "discord_shard_error";
   runtimeState.lastError = error.message;
   console.error("Discord shard error:", error);
+  scheduleRecovery(`Discord shard error: ${error.message}`, 45000);
+});
+
+client.on("shardDisconnect", (event, shardId) => {
+  runtimeState.phase = "discord_disconnected";
+  runtimeState.lastError = `Shard ${shardId} disconnected with code ${event.code}`;
+  console.error(`Discord shard ${shardId} disconnected with code ${event.code}.`);
+  scheduleRecovery(runtimeState.lastError, 45000);
+});
+
+client.on("shardReconnecting", (shardId) => {
+  runtimeState.phase = "discord_reconnecting";
+  runtimeState.lastError = `Shard ${shardId} reconnecting`;
+  console.log(`Discord shard ${shardId} reconnecting...`);
+});
+
+client.on("shardResume", (replayedEvents, shardId) => {
+  runtimeState.phase = "discord_ready";
+  runtimeState.lastError = null;
+  clearRecoveryTimer();
+  console.log(`Discord shard ${shardId} resumed with ${replayedEvents} replayed events.`);
 });
 
 client.on("invalidated", () => {
   runtimeState.phase = "discord_invalidated";
   runtimeState.lastError = "Session invalidated by Discord";
   console.error("Discord session invalidated.");
+  process.exit(1);
 });
 
 client.on("interactionCreate", async (interaction) => {
@@ -192,19 +241,14 @@ async function start() {
     runtimeState.loginStartedAt = new Date().toISOString();
     runtimeState.lastError = null;
     console.log("Connecting to Discord gateway...");
-    setTimeout(() => {
-      if (!client.isReady() && runtimeState.phase === "connecting_gateway") {
-        runtimeState.phase = "waiting_for_ready";
-        runtimeState.lastError = "Discord gateway connection has not reached ready yet";
-        console.error("Discord gateway connection has not reached ready yet.");
-      }
-    }, 30000);
+    scheduleRecovery("Discord gateway connection has not reached ready yet", 60000);
 
     await client.login(config.discordToken);
   } catch (error) {
     runtimeState.phase = "discord_start_failed";
     runtimeState.lastError = error.message;
     console.error("Discord login failed:", error);
+    process.exit(1);
   }
 }
 
