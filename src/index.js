@@ -99,6 +99,12 @@ http.createServer((req, res) => {
     uptimeSeconds: Math.floor(process.uptime()),
   };
 
+  if (req.url === "/ping") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, uptimeSeconds: payload.uptimeSeconds }));
+    return;
+  }
+
   if (req.url === "/health") {
     res.writeHead(discordReady ? 200 : 503, { "Content-Type": "application/json" });
     res.end(JSON.stringify(payload));
