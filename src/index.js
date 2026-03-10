@@ -29,14 +29,21 @@ const promptEngine = new PromptEngine({
 const port = Number(process.env.PORT || 10000);
 
 http.createServer((req, res) => {
+  const discordReady = client.isReady();
+  const payload = {
+    discordReady,
+    botUser: client.user ? client.user.tag : null,
+    uptimeSeconds: Math.floor(process.uptime()),
+  };
+
   if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("ok");
+    res.writeHead(discordReady ? 200 : 503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(payload));
     return;
   }
 
-  res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end("alive");
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(payload));
 }).listen(port, "0.0.0.0", () => {
   console.log(`Health server listening on ${port}`);
 });
@@ -95,17 +102,30 @@ async function handleButton(interaction) {
 }
 
 client.once("ready", async () => {
-  const commands = getCommandPayload();
-  const scope = await registerCommands({
-    token: config.discordToken,
-    clientId: config.discordClientId,
-    guildId: config.discordGuildId,
-    commands,
-  });
-
   console.log(`Logged in as ${client.user.tag}`);
   console.log(`Prompt pool loaded: ${promptEngine.getCounts().truth} truths, ${promptEngine.getCounts().dare} dares.`);
-  console.log(`Slash commands registered (${scope}).`);
+
+  try {
+    const commands = getCommandPayload();
+    const scope = await registerCommands({
+      token: config.discordToken,
+      clientId: config.discordClientId,
+      guildId: config.discordGuildId,
+      commands,
+    });
+
+    console.log(`Slash commands registered (${scope}).`);
+  } catch (error) {
+    console.error("Slash command registration failed:", error);
+  }
+});
+
+client.on("error", (error) => {
+  console.error("Discord client error:", error);
+});
+
+client.on("shardError", (error) => {
+  console.error("Discord shard error:", error);
 });
 
 client.on("interactionCreate", async (interaction) => {
@@ -140,4 +160,14 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-client.login(config.discordToken);
+async function start() {
+  try {
+    console.log("Connecting to Discord gateway...");
+    await client.login(config.discordToken);
+  } catch (error) {
+    console.error("Discord login failed:", error);
+    process.exit(1);
+  }
+}
+
+start();
