@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: truth-dare-bot
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    maxShutdownDelaySeconds: 120
+    autoDeployTrigger: commit
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_GUILD_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: BOT_LOGIN_429_COOLDOWN
+        value: "1800"
+      - key: BOT_LOGIN_429_COOLDOWN_MAX
+        value: "7200"
+      - key: BOT_RESTART_BACKOFF_INITIAL
+        value: "900"
+      - key: BOT_RESTART_BACKOFF_MAX
+        value: "7200"
+      - key: BOT_RAPID_EXIT_SECONDS
+        value: "180"
+      - key: BOT_STARTUP_JITTER_MAX
+        value: "45"

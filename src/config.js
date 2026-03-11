@@ -13,10 +13,21 @@ function readEnv(name, fallback = "") {
   return normalized || fallback;
 }
 
+function readFirstEnv(names, fallback = "") {
+  for (const name of names) {
+    const value = readEnv(name);
+    if (value) {
+      return value;
+    }
+  }
+
+  return fallback;
+}
+
 const config = {
-  discordToken: readEnv("DISCORD_TOKEN"),
-  discordClientId: readEnv("DISCORD_CLIENT_ID"),
-  discordGuildId: readEnv("DISCORD_GUILD_ID"),
+  discordToken: readFirstEnv(["DISCORD_TOKEN", "BOT_TOKEN"]),
+  discordClientId: readFirstEnv(["DISCORD_CLIENT_ID", "CLIENT_ID"]),
+  discordGuildId: readFirstEnv(["DISCORD_GUILD_ID", "GUILD_ID"]),
   openAIApiKey: readEnv("OPENAI_API_KEY"),
   openAIModel: readEnv("OPENAI_MODEL", "gpt-4.1-mini"),
 };

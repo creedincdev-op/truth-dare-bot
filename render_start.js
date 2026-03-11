@@ -1,14 +1,71 @@
-const { fork } = require("child_process");
+const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const { fork } = require("child_process");
 
-const BOT_ENTRY = path.join(__dirname, "src", "bot.js");
-const INITIAL_BACKOFF_MS = Number(process.env.BOT_RESTART_BACKOFF_INITIAL || 60) * 1000;
-const MAX_BACKOFF_MS = Number(process.env.BOT_RESTART_BACKOFF_MAX || 900) * 1000;
-const RAPID_EXIT_SECONDS = Number(process.env.BOT_RAPID_EXIT_SECONDS || 180);
-const STARTUP_JITTER_MAX_SECONDS = Number(process.env.BOT_STARTUP_JITTER_MAX || 15);
+const ROOT_DIR = __dirname;
+const BOT_ENTRY = path.join(ROOT_DIR, "src", "bot.js");
+const STATE_FILE = path.join(ROOT_DIR, "data", "render_runtime_state.json");
 
-const port = Number(process.env.PORT || 10000);
+function readEnv(name, fallback = "") {
+  const value = process.env[name];
+
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const normalized = value.trim().replace(/^['"]+|['"]+$/g, "");
+  return normalized || fallback;
+}
+
+function readIntEnv(name, fallback, minimum = null) {
+  const raw = readEnv(name);
+  const parsed = raw ? Number(raw) : fallback;
+  let value = Number.isFinite(parsed) ? parsed : fallback;
+
+  if (minimum !== null) {
+    value = Math.max(minimum, value);
+  }
+
+  return Math.floor(value);
+}
+
+function loadRuntimeState(initialBackoffSeconds) {
+  try {
+    if (!fs.existsSync(STATE_FILE)) {
+      return {
+        backoffSeconds: initialBackoffSeconds,
+        rapidFailures: 0,
+        nextStartAfter: 0,
+      };
+    }
+
+    const payload = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    return {
+      backoffSeconds: Math.max(initialBackoffSeconds, Number(payload.backoffSeconds) || initialBackoffSeconds),
+      rapidFailures: Math.max(0, Number(payload.rapidFailures) || 0),
+      nextStartAfter: Math.max(0, Number(payload.nextStartAfter) || 0),
+    };
+  } catch {
+    return {
+      backoffSeconds: initialBackoffSeconds,
+      rapidFailures: 0,
+      nextStartAfter: 0,
+    };
+  }
+}
+
+function saveRuntimeState(runtimeState) {
+  fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+  fs.writeFileSync(STATE_FILE, JSON.stringify(runtimeState, null, 2));
+}
+
+const port = readIntEnv("PORT", 10000, 1);
+const initialBackoffSeconds = readIntEnv("BOT_RESTART_BACKOFF_INITIAL", 900, 60);
+const maxBackoffSeconds = readIntEnv("BOT_RESTART_BACKOFF_MAX", 7200, initialBackoffSeconds);
+const rapidExitThresholdSeconds = readIntEnv("BOT_RAPID_EXIT_SECONDS", 180, 30);
+const startupJitterMaxSeconds = readIntEnv("BOT_STARTUP_JITTER_MAX", 45, 0);
+
 const runtimeState = {
   discordReady: false,
   botUser: null,
@@ -22,22 +79,31 @@ const runtimeState = {
   childStartedAt: null,
 };
 
+const persistedState = loadRuntimeState(initialBackoffSeconds);
+
 let child = null;
 let stopRequested = false;
-let restartTimer = null;
-let currentBackoffMs = INITIAL_BACKOFF_MS;
+let launchTimer = null;
 
-function clearRestartTimer() {
-  if (restartTimer) {
-    clearTimeout(restartTimer);
-    restartTimer = null;
-  }
+if (!process.env.DISCORD_TOKEN && process.env.BOT_TOKEN) {
+  process.env.DISCORD_TOKEN = readEnv("BOT_TOKEN");
+}
 
-  runtimeState.reconnectAt = null;
+if (process.env.DISCORD_CLIENT_ID) {
+  process.env.DISCORD_CLIENT_ID = readEnv("DISCORD_CLIENT_ID");
 }
 
 function uptimeSeconds() {
   return Math.floor(process.uptime());
+}
+
+function clearLaunchTimer() {
+  if (launchTimer) {
+    clearTimeout(launchTimer);
+    launchTimer = null;
+  }
+
+  runtimeState.reconnectAt = null;
 }
 
 function createPayload() {
@@ -47,23 +113,44 @@ function createPayload() {
   };
 }
 
-function scheduleRestart(reason, delayMs) {
-  runtimeState.phase = "discord_reconnect_wait";
+function updateFromChild(message) {
+  if (!message || message.type !== "status") {
+    return;
+  }
+
+  runtimeState.phase = message.phase || runtimeState.phase;
+  runtimeState.lastError = message.lastError ?? runtimeState.lastError;
+  runtimeState.loginStartedAt = message.loginStartedAt || runtimeState.loginStartedAt;
+  runtimeState.discordReady = Boolean(message.discordReady);
+  runtimeState.botUser = message.botUser || null;
+
+  if (runtimeState.discordReady) {
+    persistedState.backoffSeconds = initialBackoffSeconds;
+    persistedState.rapidFailures = 0;
+    persistedState.nextStartAfter = 0;
+    saveRuntimeState(persistedState);
+  }
+}
+
+function scheduleLaunch(delaySeconds, reason) {
+  clearLaunchTimer();
+
+  if (stopRequested) {
+    return;
+  }
+
+  const delayMs = Math.max(0, delaySeconds * 1000);
+  runtimeState.phase = "cooldown";
   runtimeState.lastError = reason;
   runtimeState.discordReady = false;
   runtimeState.botUser = null;
   runtimeState.reconnectAt = new Date(Date.now() + delayMs).toISOString();
 
-  if (restartTimer || stopRequested) {
-    return;
-  }
+  console.error(`${reason}. Launching Discord child in ${Math.round(delayMs / 1000)}s.`);
 
-  console.error(`${reason}. Restarting Discord child in ${Math.round(delayMs / 1000)}s.`);
-  restartTimer = setTimeout(() => {
-    clearRestartTimer();
-    if (!stopRequested) {
-      launchChild();
-    }
+  launchTimer = setTimeout(() => {
+    clearLaunchTimer();
+    launchChild();
   }, delayMs);
 }
 
@@ -72,14 +159,16 @@ function launchChild() {
     return;
   }
 
-  clearRestartTimer();
-  runtimeState.startAttempts += 1;
+  clearLaunchTimer();
   runtimeState.phase = "starting_child";
   runtimeState.lastError = null;
   runtimeState.loginStartedAt = new Date().toISOString();
+  runtimeState.discordReady = false;
+  runtimeState.botUser = null;
+  runtimeState.startAttempts += 1;
 
   child = fork(BOT_ENTRY, {
-    cwd: __dirname,
+    cwd: ROOT_DIR,
     env: { ...process.env },
     stdio: ["inherit", "inherit", "inherit", "ipc"],
   });
@@ -88,22 +177,7 @@ function launchChild() {
   runtimeState.childPid = child.pid;
   runtimeState.childStartedAt = new Date().toISOString();
 
-  child.on("message", (message) => {
-    if (!message || message.type !== "status") {
-      return;
-    }
-
-    runtimeState.phase = message.phase || runtimeState.phase;
-    runtimeState.lastError = message.lastError ?? runtimeState.lastError;
-    runtimeState.loginStartedAt = message.loginStartedAt || runtimeState.loginStartedAt;
-    runtimeState.discordReady = Boolean(message.discordReady);
-    runtimeState.botUser = message.botUser || null;
-
-    if (runtimeState.discordReady) {
-      runtimeState.reconnectAt = null;
-      currentBackoffMs = INITIAL_BACKOFF_MS;
-    }
-  });
+  child.on("message", updateFromChild);
 
   child.once("exit", (code, signal) => {
     const startedAt = runtimeState.childStartedAt ? Date.parse(runtimeState.childStartedAt) : Date.now();
@@ -120,21 +194,30 @@ function launchChild() {
       return;
     }
 
-    if (runtimeSeconds >= RAPID_EXIT_SECONDS) {
-      currentBackoffMs = INITIAL_BACKOFF_MS;
+    if (runtimeSeconds >= rapidExitThresholdSeconds) {
+      persistedState.rapidFailures = 0;
+      persistedState.backoffSeconds = initialBackoffSeconds;
     } else {
-      currentBackoffMs = Math.min(Math.max(INITIAL_BACKOFF_MS, currentBackoffMs * 2), MAX_BACKOFF_MS);
+      persistedState.rapidFailures += 1;
+      persistedState.backoffSeconds = Math.min(
+        Math.max(initialBackoffSeconds, persistedState.backoffSeconds * 2),
+        maxBackoffSeconds,
+      );
     }
 
-    const jitterMs = Math.floor(Math.random() * Math.max(5000, Math.floor(currentBackoffMs / 5)));
-    const delayMs = Math.min(currentBackoffMs + jitterMs, MAX_BACKOFF_MS);
-    const exitReason = `Discord child exited with code ${code ?? "null"}${signal ? ` and signal ${signal}` : ""} after ${runtimeSeconds}s`;
-    scheduleRestart(exitReason, delayMs);
+    const currentBackoffSeconds = persistedState.backoffSeconds;
+    const jitterSeconds = Math.floor(Math.random() * Math.max(15, Math.floor(currentBackoffSeconds / 5)));
+    const delaySeconds = Math.min(currentBackoffSeconds + jitterSeconds, maxBackoffSeconds);
+    const reason = `Discord child exited with code ${code ?? "null"}${signal ? ` and signal ${signal}` : ""} after ${runtimeSeconds}s`;
+
+    persistedState.nextStartAfter = Date.now() + (delaySeconds * 1000);
+    saveRuntimeState(persistedState);
+    scheduleLaunch(delaySeconds, reason);
   });
 }
 
 const server = http.createServer((req, res) => {
-  if (req.url === "/ping" || req.url === "/healthz") {
+  if (req.url === "/" || req.url === "/healthz" || req.url === "/ping") {
     const body = JSON.stringify({ ok: true, phase: runtimeState.phase, uptimeSeconds: uptimeSeconds() });
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(body);
@@ -143,7 +226,7 @@ const server = http.createServer((req, res) => {
 
   if (req.url === "/health" || req.url === "/readyz") {
     const body = JSON.stringify(createPayload());
-    res.writeHead(runtimeState.discordReady ? 200 : 503, { "Content-Type": "application/json" });
+    res.writeHead(200, { "Content-Type": "application/json" });
     res.end(body);
     return;
   }
@@ -159,7 +242,7 @@ server.listen(port, "0.0.0.0", () => {
 
 function shutdown() {
   stopRequested = true;
-  clearRestartTimer();
+  clearLaunchTimer();
 
   if (child) {
     child.kill("SIGTERM");
@@ -173,14 +256,13 @@ function shutdown() {
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
-if (STARTUP_JITTER_MAX_SECONDS > 0) {
-  const delayMs = Math.floor(Math.random() * (STARTUP_JITTER_MAX_SECONDS * 1000));
-  runtimeState.phase = "startup_jitter";
-  runtimeState.reconnectAt = new Date(Date.now() + delayMs).toISOString();
-  setTimeout(() => {
-    clearRestartTimer();
-    launchChild();
-  }, delayMs);
+const now = Date.now();
+if (persistedState.nextStartAfter > now) {
+  const delaySeconds = Math.floor((persistedState.nextStartAfter - now) / 1000);
+  scheduleLaunch(delaySeconds, `Cooling down from previous child exit`);
+} else if (startupJitterMaxSeconds > 0) {
+  const delaySeconds = Math.floor(Math.random() * startupJitterMaxSeconds);
+  scheduleLaunch(delaySeconds, "Applying startup jitter");
 } else {
   launchChild();
 }

@@ -26,26 +26,16 @@ const promptEngine = new PromptEngine({
 });
 
 let commandsRegistered = false;
-let recoveryTimer = null;
-const STARTUP_READY_TIMEOUT_MS = 10 * 60 * 1000;
-const DISCONNECT_RECOVERY_TIMEOUT_MS = 3 * 60 * 1000;
-const LOGIN_429_COOLDOWN_MS = Math.max(60, Number(process.env.BOT_LOGIN_429_COOLDOWN || 900)) * 1000;
+const LOGIN_429_COOLDOWN_MS = Math.max(60, Number(process.env.BOT_LOGIN_429_COOLDOWN || 1800)) * 1000;
 const LOGIN_429_COOLDOWN_MAX_MS = Math.max(
   LOGIN_429_COOLDOWN_MS,
-  Number(process.env.BOT_LOGIN_429_COOLDOWN_MAX || 3600) * 1000,
+  Number(process.env.BOT_LOGIN_429_COOLDOWN_MAX || 7200) * 1000,
 );
 let login429CooldownMs = LOGIN_429_COOLDOWN_MS;
 
 function sendStatus(update) {
   if (typeof process.send === "function") {
     process.send({ type: "status", ...update });
-  }
-}
-
-function clearRecoveryTimer() {
-  if (recoveryTimer) {
-    clearTimeout(recoveryTimer);
-    recoveryTimer = null;
   }
 }
 
@@ -60,8 +50,11 @@ function isDiscordRateLimit(error) {
     return false;
   }
 
-  const message = typeof error.message === "string" ? error.message : "";
-  return Number(error.status) === 429 || Number(error.code) === 429 || /\b429\b/.test(message);
+  if (Number(error.status) === 429 || Number(error.code) === 429) {
+    return true;
+  }
+
+  return typeof error.message === "string" && /\b429\b/.test(error.message);
 }
 
 function extractRetryAfterMs(error, fallbackMs) {
@@ -80,22 +73,6 @@ function extractRetryAfterMs(error, fallbackMs) {
   }
 
   return fallbackMs;
-}
-
-function scheduleExit(reason, delayMs) {
-  if (recoveryTimer) {
-    return;
-  }
-
-  console.error(`${reason}. Exiting child in ${Math.round(delayMs / 1000)}s if Discord does not recover.`);
-  recoveryTimer = setTimeout(() => {
-    clearRecoveryTimer();
-
-    if (!client.isReady()) {
-      console.error(`Child recovery timeout reached: ${reason}. Exiting child process.`);
-      process.exit(1);
-    }
-  }, delayMs);
 }
 
 async function handleTruthOrDareCommand(interaction) {
@@ -152,8 +129,8 @@ async function handleButton(interaction) {
 }
 
 client.on("ready", async () => {
-  clearRecoveryTimer();
   login429CooldownMs = LOGIN_429_COOLDOWN_MS;
+
   sendStatus({
     phase: "discord_ready",
     discordReady: true,
@@ -204,11 +181,10 @@ client.on("shardError", (error) => {
   console.error("Discord shard error:", error);
   sendStatus({
     phase: "discord_shard_error",
-    discordReady: false,
+    discordReady: client.isReady(),
     botUser: client.user ? client.user.tag : null,
     lastError: error.message,
   });
-  scheduleExit(`Discord shard error: ${error.message}`, DISCONNECT_RECOVERY_TIMEOUT_MS);
 });
 
 client.on("shardDisconnect", (event, shardId) => {
@@ -219,7 +195,6 @@ client.on("shardDisconnect", (event, shardId) => {
     botUser: client.user ? client.user.tag : null,
     lastError: `Shard ${shardId} disconnected with code ${event.code}`,
   });
-  scheduleExit(`Shard ${shardId} disconnected with code ${event.code}`, DISCONNECT_RECOVERY_TIMEOUT_MS);
 });
 
 client.on("shardReconnecting", (shardId) => {
@@ -234,8 +209,6 @@ client.on("shardReconnecting", (shardId) => {
 
 client.on("shardResume", (replayedEvents, shardId) => {
   console.log(`Discord shard ${shardId} resumed with ${replayedEvents} replayed events.`);
-  clearRecoveryTimer();
-  login429CooldownMs = LOGIN_429_COOLDOWN_MS;
   sendStatus({
     phase: "discord_ready",
     discordReady: true,
@@ -246,7 +219,6 @@ client.on("shardResume", (replayedEvents, shardId) => {
 
 client.on("invalidated", () => {
   console.error("Discord session invalidated.");
-  clearRecoveryTimer();
   sendStatus({
     phase: "discord_invalidated",
     discordReady: false,
@@ -311,13 +283,11 @@ async function start() {
     });
 
     console.log("Connecting to Discord gateway...");
-    scheduleExit("Discord gateway connection timed out before ready", STARTUP_READY_TIMEOUT_MS);
 
     try {
       await client.login(config.discordToken);
       return;
     } catch (error) {
-      clearRecoveryTimer();
       console.error("Discord login failed:", error);
 
       if (!isDiscordRateLimit(error)) {
