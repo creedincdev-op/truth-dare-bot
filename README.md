@@ -10,7 +10,7 @@ High-variety Discord Truth or Dare bot with:
 ## 1) Install
 
 ```bash
-npm install
+pip install -r requirements.txt
 ```
 
 ## 2) Configure
@@ -18,7 +18,7 @@ npm install
 Copy `.env.example` to `.env` and set:
 
 - `DISCORD_TOKEN`: Bot token
-- `DISCORD_CLIENT_ID`: Discord application client ID
+- `DISCORD_CLIENT_ID`: Optional app ID reference
 - `DISCORD_GUILD_ID`: Optional (recommended for instant test command updates)
 - `OPENAI_API_KEY`: Optional (enables AI-generated fresh prompts)
 - `OPENAI_MODEL`: Optional, defaults to `gpt-4.1-mini`
@@ -27,17 +27,18 @@ Copy `.env.example` to `.env` and set:
 - `BOT_RESTART_BACKOFF_INITIAL`: Optional supervisor restart backoff, defaults to `900`
 - `BOT_RESTART_BACKOFF_MAX`: Optional max supervisor restart backoff, defaults to `7200`
 - `BOT_STARTUP_JITTER_MAX`: Optional startup jitter, defaults to `45`
-- `BOT_GATEWAY_READY_TIMEOUT_SECONDS`: Optional Discord gateway ready timeout before the child exits for supervisor restart, defaults to `300`
 
 ## 3) Run
 
 ```bash
-npm start
+python render_start.py
 ```
 
 ## Render Hosting
 
-- Start command: `npm start`
+- Runtime: `Python 3`
+- Build command: `pip install -r requirements.txt`
+- Start command: `python render_start.py`
 - Health check path: `/healthz`
 - Keepalive monitor: `/healthz`
 - Discord status check: `/health`
@@ -50,12 +51,12 @@ npm start
 
 ## Notes
 
-- Prompt pool is generated from curated base prompts plus template and matrix expansion.
+- Prompt pool is shipped as `data/prompt_pools.json` and loaded directly by the Python bot.
 - The tone mixes crush, celeb, ex, and social-media prompts with general fun prompts instead of making the whole bot one style.
 - The bot avoids recent repeats per channel by tracking history and used prompt keys.
 - AI is optional. If no OpenAI key is configured, bot uses local pool only.
 - Prompt safety filter blocks explicit sexual content, drugs, and profanity.
-- `npm start` now runs the same Render pattern used by the CLINX bot: a parent supervisor keeps `/healthz` online and restarts the Discord child only if the child exits.
+- `python render_start.py` now follows the same Render pattern as the CLINX bot: a parent supervisor keeps `/healthz` online and restarts the Discord child only if the child exits.
 - The Discord child process handles login `429` cooldowns internally instead of forcing Render restart loops.
 
 ## Suggested Discord Permissions
@@ -67,7 +68,7 @@ npm start
 - `Use Application Commands`
 ## Quick Start (Windows)
 
-Double-click `start.bat` to auto-install dependencies (if missing) and start the bot.
+Double-click `start.bat` to install Python dependencies and start the supervised bot.
 
 ## Developer Portal Checklist
 

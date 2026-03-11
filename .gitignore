@@ -2,3 +2,6 @@ node_modules/
 .env
 *-debug-*.log
 data/render_runtime_state.json
+data/runtime_status.json
+__pycache__/
+*.pyc
