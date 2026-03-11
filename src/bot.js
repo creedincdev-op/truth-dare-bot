@@ -29,6 +29,12 @@ let commandsRegistered = false;
 let recoveryTimer = null;
 const STARTUP_READY_TIMEOUT_MS = 10 * 60 * 1000;
 const DISCONNECT_RECOVERY_TIMEOUT_MS = 3 * 60 * 1000;
+const LOGIN_429_COOLDOWN_MS = Math.max(60, Number(process.env.BOT_LOGIN_429_COOLDOWN || 900)) * 1000;
+const LOGIN_429_COOLDOWN_MAX_MS = Math.max(
+  LOGIN_429_COOLDOWN_MS,
+  Number(process.env.BOT_LOGIN_429_COOLDOWN_MAX || 3600) * 1000,
+);
+let login429CooldownMs = LOGIN_429_COOLDOWN_MS;
 
 function sendStatus(update) {
   if (typeof process.send === "function") {
@@ -41,6 +47,39 @@ function clearRecoveryTimer() {
     clearTimeout(recoveryTimer);
     recoveryTimer = null;
   }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isDiscordRateLimit(error) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const message = typeof error.message === "string" ? error.message : "";
+  return Number(error.status) === 429 || Number(error.code) === 429 || /\b429\b/.test(message);
+}
+
+function extractRetryAfterMs(error, fallbackMs) {
+  const candidates = [
+    error && error.retry_after,
+    error && error.retryAfter,
+    error && error.rawError && error.rawError.retry_after,
+    error && error.data && error.data.retry_after,
+  ];
+
+  for (const value of candidates) {
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.ceil(seconds * 1000);
+    }
+  }
+
+  return fallbackMs;
 }
 
 function scheduleExit(reason, delayMs) {
@@ -114,6 +153,7 @@ async function handleButton(interaction) {
 
 client.on("ready", async () => {
   clearRecoveryTimer();
+  login429CooldownMs = LOGIN_429_COOLDOWN_MS;
   sendStatus({
     phase: "discord_ready",
     discordReady: true,
@@ -195,6 +235,7 @@ client.on("shardReconnecting", (shardId) => {
 client.on("shardResume", (replayedEvents, shardId) => {
   console.log(`Discord shard ${shardId} resumed with ${replayedEvents} replayed events.`);
   clearRecoveryTimer();
+  login429CooldownMs = LOGIN_429_COOLDOWN_MS;
   sendStatus({
     phase: "discord_ready",
     discordReady: true,
@@ -258,31 +299,57 @@ process.on("SIGINT", () => {
 });
 
 async function start() {
-  const loginStartedAt = new Date().toISOString();
+  while (true) {
+    const loginStartedAt = new Date().toISOString();
 
-  sendStatus({
-    phase: "connecting_gateway",
-    discordReady: false,
-    botUser: null,
-    lastError: null,
-    loginStartedAt,
-  });
-
-  console.log("Connecting to Discord gateway...");
-  scheduleExit("Discord gateway connection timed out before ready", STARTUP_READY_TIMEOUT_MS);
-
-  try {
-    await client.login(config.discordToken);
-  } catch (error) {
-    console.error("Discord login failed:", error);
     sendStatus({
-      phase: "discord_start_failed",
+      phase: "connecting_gateway",
       discordReady: false,
       botUser: null,
-      lastError: error.message,
+      lastError: null,
       loginStartedAt,
     });
-    process.exit(1);
+
+    console.log("Connecting to Discord gateway...");
+    scheduleExit("Discord gateway connection timed out before ready", STARTUP_READY_TIMEOUT_MS);
+
+    try {
+      await client.login(config.discordToken);
+      return;
+    } catch (error) {
+      clearRecoveryTimer();
+      console.error("Discord login failed:", error);
+
+      if (!isDiscordRateLimit(error)) {
+        sendStatus({
+          phase: "discord_start_failed",
+          discordReady: false,
+          botUser: null,
+          lastError: error.message,
+          loginStartedAt,
+        });
+        process.exit(1);
+      }
+
+      const retryAfterMs = Math.min(
+        Math.max(extractRetryAfterMs(error, login429CooldownMs), LOGIN_429_COOLDOWN_MS),
+        LOGIN_429_COOLDOWN_MAX_MS,
+      );
+      const retryMessage = `Discord login rate limited. Retrying in ${Math.round(retryAfterMs / 1000)}s.`;
+
+      sendStatus({
+        phase: "discord_login_rate_limited",
+        discordReady: false,
+        botUser: null,
+        lastError: retryMessage,
+        loginStartedAt,
+      });
+
+      console.error(retryMessage);
+      client.destroy();
+      await sleep(retryAfterMs);
+      login429CooldownMs = Math.min(login429CooldownMs * 2, LOGIN_429_COOLDOWN_MAX_MS);
+    }
   }
 }
 
