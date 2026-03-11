@@ -1,16 +1,8 @@
 const BLOCKED_WORDS = [
-  "gf",
-  "boyfriend",
-  "girlfriend",
-  "ex",
-  "kiss",
   "sexy",
+  "sex",
   "nsfw",
   "hookup",
-  "crush",
-  "romantic",
-  "romance",
-  "date",
   "make out",
   "drunk",
   "weed",
@@ -24,8 +16,11 @@ const BLOCKED_WORDS = [
   "bitch",
   "asshole",
   "nude",
+  "naked",
   "bedroom",
-  "body count"
+  "body count",
+  "porn",
+  "oral",
 ];
 
 function normalizeText(value) {

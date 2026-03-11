@@ -81,37 +81,95 @@ function buildTemplatePool(templates, capPerTemplate = 500) {
   return generated;
 }
 
+function pushWithCap(results, value, maxCount) {
+  results.push(value);
+  return results.length >= maxCount;
+}
+
 function buildTruthMatrixPool(maxCount = 9000) {
   const results = [];
-  const { openers, subjects, angles, timeframes, contexts } = truthMatrix;
+  const {
+    crushCategories,
+    crushAngles,
+    attentionHooks,
+    attentionContexts,
+    scenarios,
+    comparisons,
+    opinionTopics,
+    opinionContexts,
+    behaviors,
+    popCultureTopics,
+  } = truthMatrix;
 
-  for (const opener of openers) {
-    for (const subject of subjects) {
-      for (const angle of angles) {
-        results.push(`${opener} ${subject} ${angle}?`);
-
-        if (results.length >= maxCount) {
-          return results;
-        }
+  for (const category of crushCategories) {
+    for (const angle of crushAngles) {
+      if (pushWithCap(results, `Who is your ${category} ${angle}?`, maxCount)) {
+        return results;
       }
     }
   }
 
-  for (const subject of subjects) {
-    for (const timeframe of timeframes) {
-      results.push(`What is one ${subject} you want to improve in ${timeframe}?`);
+  for (const category of crushCategories) {
+    if (pushWithCap(results, `Which ${category} answer of yours would start a roast session in your group chat?`, maxCount)) {
+      return results;
+    }
+  }
 
-      if (results.length >= maxCount) {
+  for (const hook of attentionHooks) {
+    for (const context of attentionContexts) {
+      if (pushWithCap(results, `What kind of ${hook} gets your attention ${context}?`, maxCount)) {
+        return results;
+      }
+      if (pushWithCap(results, `Would ${hook} make you lose your fake nonchalance ${context}?`, maxCount)) {
         return results;
       }
     }
+  }
 
-    for (const context of contexts) {
-      results.push(`What is one ${subject} in ${context} you want to improve?`);
+  for (const scenario of scenarios) {
+    if (pushWithCap(results, `Be honest, what would you do if ${scenario}?`, maxCount)) {
+      return results;
+    }
+    if (pushWithCap(results, `Could you still act cool if ${scenario}?`, maxCount)) {
+      return results;
+    }
+  }
 
-      if (results.length >= maxCount) {
+  for (const { left, right } of comparisons) {
+    if (pushWithCap(results, `Which gets you faster: ${left} or ${right}?`, maxCount)) {
+      return results;
+    }
+    if (pushWithCap(results, `Which is worse for your self-control: ${left} or ${right}?`, maxCount)) {
+      return results;
+    }
+  }
+
+  for (const topic of opinionTopics) {
+    for (const context of opinionContexts) {
+      if (pushWithCap(results, `What is your take on ${topic} ${context}?`, maxCount)) {
         return results;
       }
+      if (pushWithCap(results, `What is your savage take on ${topic} ${context}?`, maxCount)) {
+        return results;
+      }
+    }
+  }
+
+  for (const behavior of behaviors) {
+    if (pushWithCap(results, `Have you ever ${behavior}?`, maxCount)) {
+      return results;
+    }
+    if (pushWithCap(results, `When was the last time you ${behavior}?`, maxCount)) {
+      return results;
+    }
+  }
+
+  for (const topic of popCultureTopics) {
+    if (pushWithCap(results, `Which ${topic} take do you defend the hardest?`, maxCount)) {
+      return results;
+    }
+    if (pushWithCap(results, `What is your messiest opinion about ${topic}?`, maxCount)) {
+      return results;
     }
   }
 
@@ -120,20 +178,63 @@ function buildTruthMatrixPool(maxCount = 9000) {
 
 function buildDareMatrixPool(maxCount = 9000) {
   const results = [];
-  const { actions, activities, formats, durations, addons } = dareMatrix;
+  const {
+    revealTopics,
+    reactionScenarios,
+    platforms,
+    tones,
+    personas,
+    choices,
+    generalActs,
+    durations,
+  } = dareMatrix;
 
-  for (const action of actions) {
-    for (const activity of activities) {
-      for (const format of formats) {
-        for (const duration of durations) {
-          for (const addon of addons) {
-            results.push(`${action} ${activity} ${format} ${duration}, ${addon}.`);
+  for (const topic of revealTopics) {
+    if (pushWithCap(results, `Reveal your ${topic} in one line.`, maxCount)) {
+      return results;
+    }
+    if (pushWithCap(results, `Announce your ${topic} like the whole chat was waiting for it.`, maxCount)) {
+      return results;
+    }
+  }
 
-            if (results.length >= maxCount) {
-              return results;
-            }
-          }
-        }
+  for (const scenario of reactionScenarios) {
+    for (const duration of durations) {
+      if (pushWithCap(results, `Act like ${scenario} for ${duration}.`, maxCount)) {
+        return results;
+      }
+    }
+  }
+
+  for (const tone of tones) {
+    for (const platform of platforms) {
+      if (pushWithCap(results, `Give a ${tone} line you would use in a ${platform}.`, maxCount)) {
+        return results;
+      }
+    }
+  }
+
+  for (const { left, right } of choices) {
+    if (pushWithCap(results, `Pick ${left} or ${right}, then defend it like your group chat is roasting you.`, maxCount)) {
+      return results;
+    }
+    if (pushWithCap(results, `Settle ${left} versus ${right} in one savage sentence.`, maxCount)) {
+      return results;
+    }
+  }
+
+  for (const persona of personas) {
+    for (const topic of revealTopics.slice(0, 5)) {
+      if (pushWithCap(results, `Introduce your ${topic} like a ${persona}.`, maxCount)) {
+        return results;
+      }
+    }
+  }
+
+  for (const act of generalActs) {
+    for (const duration of durations) {
+      if (pushWithCap(results, `Do ${act} for ${duration}.`, maxCount)) {
+        return results;
       }
     }
   }

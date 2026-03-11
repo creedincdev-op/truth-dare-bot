@@ -3,7 +3,7 @@
 High-variety Discord Truth or Dare bot with:
 - Huge local prompt pool (truth + dare)
 - Low-repeat engine per channel
-- PG-safe filtering (very low curse/romance/ex style prompts)
+- Pop-culture and crush-aware prompt mix without explicit content
 - Optional AI fallback for fresh prompts when needed
 - Interactive button panel (`Truth`, `Dare`, `Random`)
 
@@ -36,10 +36,11 @@ npm start
 
 ## Notes
 
-- Prompt pool is generated from large curated base prompts + template/matrix expansion.
+- Prompt pool is generated from curated base prompts plus template and matrix expansion.
+- The tone mixes crush, celeb, ex, and social-media prompts with general fun prompts instead of making the whole bot one style.
 - The bot avoids recent repeats per channel by tracking history and used prompt keys.
 - AI is optional. If no OpenAI key is configured, bot uses local pool only.
-- Prompt safety filter blocks many romance/ex/profanity style keywords.
+- Prompt safety filter blocks explicit sexual content, drugs, and profanity.
 
 ## Suggested Discord Permissions
 

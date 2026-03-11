@@ -22,7 +22,10 @@ class AIPromptService {
     const instruction = [
       "Generate exactly ONE concise Discord game prompt.",
       `Mode: ${mode}`,
-      "Style: friendly, creative, PG, non-romantic, non-sexual, no relationship/ex references, no profanity.",
+      "Style: funny, savage, playful, and Indian gen-z friendly.",
+      "Allow crush, ex, celebrity, simping, and social-media themes, but not in every prompt.",
+      "Keep the tone slightly filmy or slightly delulu when it fits.",
+      "Keep it non-explicit, non-abusive, and profanity-free.",
       "Keep it under 130 characters.",
       "Avoid duplicates and avoid these recent prompts:",
       recentBlock || "(none)",
