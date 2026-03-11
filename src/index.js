@@ -2,6 +2,7 @@ const {
   Client,
   GatewayIntentBits,
 } = require("discord.js");
+const { once } = require("events");
 const http = require("http");
 const { config, assertConfig } = require("./config");
 const { getCommandPayload } = require("./discord/commands");
@@ -31,32 +32,43 @@ const runtimeState = {
   phase: "booting",
   lastError: null,
   loginStartedAt: null,
+  reconnectAt: null,
+  startAttempts: 0,
 };
 let recoveryTimer = null;
 let hasEverBeenReady = false;
+let loginInFlight = false;
+let commandsRegistered = false;
+const STARTUP_READY_TIMEOUT_MS = 10 * 60 * 1000;
+const DISCONNECT_RECOVERY_TIMEOUT_MS = 3 * 60 * 1000;
+const RETRY_DELAY_MS = 60 * 1000;
 
 function clearRecoveryTimer() {
   if (recoveryTimer) {
     clearTimeout(recoveryTimer);
     recoveryTimer = null;
   }
+
+  runtimeState.reconnectAt = null;
 }
 
 function scheduleRecovery(reason, delayMs) {
   runtimeState.lastError = reason;
+  runtimeState.reconnectAt = new Date(Date.now() + delayMs).toISOString();
 
   if (recoveryTimer) {
     return;
   }
 
-  console.error(`${reason}. Restarting process in ${Math.round(delayMs / 1000)}s if Discord does not recover.`);
+  console.error(`${reason}. Retrying Discord connection in ${Math.round(delayMs / 1000)}s if Discord does not recover.`);
   recoveryTimer = setTimeout(() => {
-    if (!client.isReady()) {
-      console.error(`Recovery timeout reached: ${reason}. Exiting for Render restart.`);
-      process.exit(1);
-    }
-
     clearRecoveryTimer();
+
+    if (!client.isReady()) {
+      console.error(`Recovery timeout reached: ${reason}. Reconnecting Discord client.`);
+      client.destroy();
+      void start();
+    }
   }, delayMs);
 }
 
@@ -68,6 +80,8 @@ http.createServer((req, res) => {
     phase: runtimeState.phase,
     lastError: runtimeState.lastError,
     loginStartedAt: runtimeState.loginStartedAt,
+    reconnectAt: runtimeState.reconnectAt,
+    startAttempts: runtimeState.startAttempts,
     uptimeSeconds: Math.floor(process.uptime()),
   };
 
@@ -142,13 +156,17 @@ async function handleButton(interaction) {
   });
 }
 
-client.once("ready", async () => {
+client.on("ready", async () => {
   hasEverBeenReady = true;
   runtimeState.phase = "discord_ready";
   runtimeState.lastError = null;
   clearRecoveryTimer();
   console.log(`Logged in as ${client.user.tag}`);
   console.log(`Prompt pool loaded: ${promptEngine.getCounts().truth} truths, ${promptEngine.getCounts().dare} dares.`);
+
+  if (commandsRegistered) {
+    return;
+  }
 
   try {
     const commands = getCommandPayload();
@@ -159,6 +177,7 @@ client.once("ready", async () => {
       commands,
     });
 
+    commandsRegistered = true;
     console.log(`Slash commands registered (${scope}).`);
   } catch (error) {
     console.error("Slash command registration failed:", error);
@@ -176,7 +195,7 @@ client.on("shardError", (error) => {
   runtimeState.lastError = error.message;
   console.error("Discord shard error:", error);
   if (hasEverBeenReady) {
-    scheduleRecovery(`Discord shard error: ${error.message}`, 180000);
+    scheduleRecovery(`Discord shard error: ${error.message}`, DISCONNECT_RECOVERY_TIMEOUT_MS);
   }
 });
 
@@ -185,7 +204,7 @@ client.on("shardDisconnect", (event, shardId) => {
   runtimeState.lastError = `Shard ${shardId} disconnected with code ${event.code}`;
   console.error(`Discord shard ${shardId} disconnected with code ${event.code}.`);
   if (hasEverBeenReady) {
-    scheduleRecovery(runtimeState.lastError, 180000);
+    scheduleRecovery(runtimeState.lastError, DISCONNECT_RECOVERY_TIMEOUT_MS);
   }
 });
 
@@ -206,7 +225,8 @@ client.on("invalidated", () => {
   runtimeState.phase = "discord_invalidated";
   runtimeState.lastError = "Session invalidated by Discord";
   console.error("Discord session invalidated.");
-  process.exit(1);
+  client.destroy();
+  scheduleRecovery(runtimeState.lastError, RETRY_DELAY_MS);
 });
 
 client.on("interactionCreate", async (interaction) => {
@@ -242,19 +262,38 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 async function start() {
+  if (loginInFlight || client.isReady()) {
+    return;
+  }
+
+  loginInFlight = true;
+
   try {
     runtimeState.phase = "connecting_gateway";
     runtimeState.loginStartedAt = new Date().toISOString();
+    runtimeState.reconnectAt = null;
+    runtimeState.startAttempts += 1;
     runtimeState.lastError = null;
     console.log("Connecting to Discord gateway...");
-    scheduleRecovery("Discord gateway connection has not reached ready yet", 240000);
+    const readyPromise = once(client, "ready");
 
     await client.login(config.discordToken);
+    await Promise.race([
+      readyPromise,
+      new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("Discord gateway connection timed out before ready"));
+        }, STARTUP_READY_TIMEOUT_MS);
+      }),
+    ]);
   } catch (error) {
-    runtimeState.phase = "discord_start_failed";
+    runtimeState.phase = "discord_reconnect_wait";
     runtimeState.lastError = error.message;
     console.error("Discord login failed:", error);
-    process.exit(1);
+    client.destroy();
+    scheduleRecovery(`Discord login failed: ${error.message}`, RETRY_DELAY_MS);
+  } finally {
+    loginInFlight = false;
   }
 }
 
