@@ -3,6 +3,7 @@ services:
     name: truth-dare-bot
     runtime: node
     plan: free
+    region: singapore
     branch: main
     buildCommand: npm ci
     startCommand: npm start
