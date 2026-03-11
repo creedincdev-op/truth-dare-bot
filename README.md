@@ -29,6 +29,13 @@ Copy `.env.example` to `.env` and set:
 npm start
 ```
 
+## Render Hosting
+
+- Start command: `npm start`
+- Health check path: `/healthz`
+- Keepalive monitor: `/healthz`
+- Discord readiness check: `/health`
+
 ## Commands
 
 - `/truthordare` with optional `mode` (`random`, `truth`, `dare`)
@@ -41,6 +48,7 @@ npm start
 - The bot avoids recent repeats per channel by tracking history and used prompt keys.
 - AI is optional. If no OpenAI key is configured, bot uses local pool only.
 - Prompt safety filter blocks explicit sexual content, drugs, and profanity.
+- `npm start` now runs a small supervisor process that keeps the Render health endpoint up and restarts the Discord bot child process with backoff if it crashes.
 
 ## Suggested Discord Permissions
 

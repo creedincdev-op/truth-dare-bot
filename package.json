@@ -2,11 +2,11 @@
   "name": "truth-dare-bot",
   "version": "1.0.0",
   "description": "Discord Truth or Dare bot with massive low-repeat prompt variety and optional AI generation.",
-  "main": "src/index.js",
+  "main": "render_start.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index.js",
-    "check": "node --check src/index.js"
+    "start": "node render_start.js",
+    "check": "node --check render_start.js && node --check src/bot.js && node --check src/index.js"
   },
   "engines": {
     "node": ">=20.0.0"
