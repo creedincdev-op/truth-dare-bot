@@ -76,6 +76,8 @@ function extractRetryAfterMs(error, fallbackMs) {
 }
 
 async function handleTruthOrDareCommand(interaction) {
+  await interaction.deferReply();
+
   const mode = interaction.options.getString("mode") || "random";
   const prompt = await promptEngine.getNextPrompt({
     mode,
@@ -83,13 +85,15 @@ async function handleTruthOrDareCommand(interaction) {
     requesterTag: interaction.user.tag,
   });
 
-  await interaction.reply({
+  await interaction.editReply({
     embeds: [createPromptEmbed(prompt, interaction.user)],
     components: [createPromptButtons()],
   });
 }
 
 async function handleStatsCommand(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
   const counts = promptEngine.getCounts();
   const channelStats = promptEngine.getChannelStats(interaction.channelId);
 
@@ -102,21 +106,20 @@ async function handleStatsCommand(interaction) {
     `AI fallback: **${aiPromptService.enabled ? "ON" : "OFF"}**`,
   ].join("\n");
 
-  await interaction.reply({
+  await interaction.editReply({
     content,
-    ephemeral: true,
   });
 }
 
 async function handleButton(interaction) {
+  await interaction.deferUpdate();
+
   const [, mode] = interaction.customId.split(":");
   const prompt = await promptEngine.getNextPrompt({
     mode,
     channelId: interaction.channelId,
     requesterTag: interaction.user.tag,
   });
-
-  await interaction.deferUpdate();
 
   if (interaction.message && interaction.message.editable) {
     await interaction.message.edit({ components: [] });
