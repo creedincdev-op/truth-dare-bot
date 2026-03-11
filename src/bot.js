@@ -31,7 +31,9 @@ const LOGIN_429_COOLDOWN_MAX_MS = Math.max(
   LOGIN_429_COOLDOWN_MS,
   Number(process.env.BOT_LOGIN_429_COOLDOWN_MAX || 7200) * 1000,
 );
+const GATEWAY_READY_TIMEOUT_MS = Math.max(60, Number(process.env.BOT_GATEWAY_READY_TIMEOUT_SECONDS || 300)) * 1000;
 let login429CooldownMs = LOGIN_429_COOLDOWN_MS;
+let startupTimeout = null;
 
 function sendStatus(update) {
   if (typeof process.send === "function") {
@@ -43,6 +45,29 @@ function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function clearStartupTimeout() {
+  if (startupTimeout) {
+    clearTimeout(startupTimeout);
+    startupTimeout = null;
+  }
+}
+
+function armStartupTimeout() {
+  clearStartupTimeout();
+  startupTimeout = setTimeout(() => {
+    if (!client.isReady()) {
+      console.error(`Discord gateway did not reach ready within ${Math.round(GATEWAY_READY_TIMEOUT_MS / 1000)}s. Exiting child process.`);
+      sendStatus({
+        phase: "gateway_ready_timeout",
+        discordReady: false,
+        botUser: null,
+        lastError: `Discord gateway did not reach ready within ${Math.round(GATEWAY_READY_TIMEOUT_MS / 1000)}s`,
+      });
+      process.exit(1);
+    }
+  }, GATEWAY_READY_TIMEOUT_MS);
 }
 
 function isDiscordRateLimit(error) {
@@ -132,6 +157,7 @@ async function handleButton(interaction) {
 }
 
 client.on("ready", async () => {
+  clearStartupTimeout();
   login429CooldownMs = LOGIN_429_COOLDOWN_MS;
 
   sendStatus({
@@ -222,6 +248,7 @@ client.on("shardResume", (replayedEvents, shardId) => {
 
 client.on("invalidated", () => {
   console.error("Discord session invalidated.");
+  clearStartupTimeout();
   sendStatus({
     phase: "discord_invalidated",
     discordReady: false,
@@ -264,11 +291,13 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 process.on("SIGTERM", () => {
+  clearStartupTimeout();
   client.destroy();
   process.exit(0);
 });
 
 process.on("SIGINT", () => {
+  clearStartupTimeout();
   client.destroy();
   process.exit(0);
 });
@@ -286,11 +315,13 @@ async function start() {
     });
 
     console.log("Connecting to Discord gateway...");
+    armStartupTimeout();
 
     try {
       await client.login(config.discordToken);
       return;
     } catch (error) {
+      clearStartupTimeout();
       console.error("Discord login failed:", error);
 
       if (!isDiscordRateLimit(error)) {

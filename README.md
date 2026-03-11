@@ -27,6 +27,7 @@ Copy `.env.example` to `.env` and set:
 - `BOT_RESTART_BACKOFF_INITIAL`: Optional supervisor restart backoff, defaults to `900`
 - `BOT_RESTART_BACKOFF_MAX`: Optional max supervisor restart backoff, defaults to `7200`
 - `BOT_STARTUP_JITTER_MAX`: Optional startup jitter, defaults to `45`
+- `BOT_GATEWAY_READY_TIMEOUT_SECONDS`: Optional Discord gateway ready timeout before the child exits for supervisor restart, defaults to `300`
 
 ## 3) Run
 
