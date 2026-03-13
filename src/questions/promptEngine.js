@@ -1,6 +1,13 @@
-const { buildPromptPools } = require("./poolBuilder");
 const { pickRandom, shortId } = require("../utils/random");
-const { normalizeText, containsBlockedWords } = require("../utils/textFilters");
+const { normalizeText, sanitizePrompt } = require("../utils/textFilters");
+const {
+  CATEGORY_LABELS,
+  DEFAULT_GUILD_CONFIG,
+  GAME_LABELS,
+  RATINGS,
+  buildPromptCatalog,
+  isInternalPlayableGame,
+} = require("./catalog");
 
 const SIGNATURE_STOP_WORDS = new Set([
   "a",
@@ -9,8 +16,6 @@ const SIGNATURE_STOP_WORDS = new Set([
   "are",
   "at",
   "be",
-  "do",
-  "did",
   "for",
   "from",
   "have",
@@ -19,40 +24,24 @@ const SIGNATURE_STOP_WORDS = new Set([
   "in",
   "is",
   "it",
-  "kind",
-  "like",
-  "most",
   "of",
   "on",
-  "one",
   "or",
-  "really",
-  "right",
-  "someone",
-  "something",
-  "that",
   "the",
-  "thing",
-  "this",
   "to",
   "what",
-  "when",
-  "which",
   "who",
   "would",
   "you",
   "your",
 ]);
 
-const SIGNATURE_SHORT_ALLOWLIST = new Set(["dm", "ex", "ig"]);
-
 function buildPromptSignature(text) {
-  const tokens = normalizeText(text)
-    .split(" ")
-    .filter((token) => token && !SIGNATURE_STOP_WORDS.has(token))
-    .filter((token) => token.length > 2 || SIGNATURE_SHORT_ALLOWLIST.has(token));
-
-  return new Set(tokens);
+  return new Set(
+    normalizeText(text)
+      .split(" ")
+      .filter((token) => token && token.length > 2 && !SIGNATURE_STOP_WORDS.has(token)),
+  );
 }
 
 function scoreSignatureOverlap(signatureA, signatureB) {
@@ -71,153 +60,315 @@ function scoreSignatureOverlap(signatureA, signatureB) {
 }
 
 class PromptEngine {
-  constructor({ aiPromptService = null, recentHistoryLimit = 160 } = {}) {
+  constructor({ aiPromptService = null, store, recentHistoryLimit = 120 } = {}) {
     this.aiPromptService = aiPromptService;
+    this.store = store;
     this.recentHistoryLimit = recentHistoryLimit;
-    this.stateByChannel = new Map();
-
-    const { truthPool, darePool } = buildPromptPools();
-    this.truthPool = truthPool;
-    this.darePool = darePool;
+    this.catalog = buildPromptCatalog();
   }
 
-  getPool(type) {
-    return type === "dare" ? this.darePool : this.truthPool;
+  resolveRating(requestedRating, guildConfig) {
+    if (RATINGS.includes(requestedRating)) {
+      return requestedRating;
+    }
+    return guildConfig.defaultRating || DEFAULT_GUILD_CONFIG.defaultRating;
   }
 
   getCounts() {
-    return {
-      truth: this.truthPool.length,
-      dare: this.darePool.length,
-    };
-  }
+    const counts = {};
 
-  resolveType(mode) {
-    if (mode === "truth" || mode === "dare") {
-      return mode;
+    for (const prompt of this.catalog) {
+      counts[prompt.game] = (counts[prompt.game] || 0) + 1;
     }
-    return Math.random() < 0.5 ? "truth" : "dare";
+
+    return counts;
   }
 
-  getChannelState(channelId) {
-    if (!this.stateByChannel.has(channelId)) {
-      this.stateByChannel.set(channelId, {
-        history: [],
-        usedTruth: new Set(),
-        usedDare: new Set(),
-      });
+  getCategoryCounts({ game, rating, guildId }) {
+    const guildConfig = guildId ? this.store.getGuildConfig(guildId) : DEFAULT_GUILD_CONFIG;
+    const effectiveRating = this.resolveRating(rating, guildConfig);
+    const resolvedGames = this.resolveGameKeys(game, guildConfig);
+    const activeGames = new Set(resolvedGames);
+    const disabledCategories = new Set(guildConfig.disabledCategories || []);
+    const counts = {};
+
+    for (const prompt of this.catalog) {
+      if (!activeGames.has(prompt.game)) {
+        continue;
+      }
+      if (prompt.rating !== effectiveRating) {
+        continue;
+      }
+      if (disabledCategories.has(prompt.category)) {
+        continue;
+      }
+
+      counts[prompt.category] = (counts[prompt.category] || 0) + 1;
     }
-    return this.stateByChannel.get(channelId);
+
+    return counts;
   }
 
-  getChannelStats(channelId) {
-    const state = this.getChannelState(channelId);
-    return {
-      historySize: state.history.length,
-      truthUsed: state.usedTruth.size,
-      dareUsed: state.usedDare.size,
-    };
-  }
+  resolveGameKeys(requestedGame, guildConfig) {
+    const disabledGames = new Set(guildConfig.disabledGames || []);
+    const internalGames = [
+      "truth",
+      "dare",
+      "would_you_rather",
+      "never_have_i_ever",
+      "paranoia",
+      "icebreaker",
+      "challenge",
+      "hot_take",
+    ].filter((game) => !disabledGames.has(game));
 
-  pushHistory(channelState, key) {
-    channelState.history.unshift(key);
-    if (channelState.history.length > this.recentHistoryLimit) {
-      channelState.history.pop();
+    if (requestedGame === "random" || !requestedGame) {
+      return internalGames;
     }
+
+    if (requestedGame === "truth_or_dare") {
+      return internalGames.filter((game) => game === "truth" || game === "dare");
+    }
+
+    if (isInternalPlayableGame(requestedGame) && !disabledGames.has(requestedGame)) {
+      return [requestedGame];
+    }
+
+    return internalGames;
   }
 
-  selectPromptFromPool(pool, usedSet, recentHistory) {
-    const recentSet = new Set(recentHistory.slice(0, 80));
-    const recentSignatures = recentHistory
-      .slice(0, 18)
-      .map((entry) => buildPromptSignature(entry))
-      .filter((signature) => signature.size > 0);
+  async maybeRewritePrompt({ prompt, recentTexts, maxPromptLength }) {
+    const cleanedText = sanitizePrompt(prompt.text);
+    const needsRewrite = cleanedText.length < 32;
 
-    let candidates = pool.filter((prompt) => {
-      const key = normalizeText(prompt);
-      return !usedSet.has(key) && !recentSet.has(key);
+    if (!needsRewrite || !this.aiPromptService || !this.aiPromptService.enabled) {
+      return prompt;
+    }
+
+    const rewritten = await this.aiPromptService.rewritePrompt({
+      game: prompt.game,
+      category: prompt.category,
+      rating: prompt.rating,
+      sourcePrompt: prompt.text,
+      recentPrompts: recentTexts,
+      maxLength: maxPromptLength,
     });
 
-    if (candidates.length === 0) {
-      usedSet.clear();
-      candidates = pool.filter((prompt) => !recentSet.has(normalizeText(prompt)));
+    if (!rewritten) {
+      return prompt;
     }
 
-    if (candidates.length === 0) {
-      candidates = pool;
-    }
+    return {
+      ...prompt,
+      text: rewritten,
+      key: normalizeText(`${prompt.game}|${prompt.category}|${prompt.rating}|${rewritten}`),
+      source: "ai-rewrite",
+    };
+  }
 
-    const scoredCandidates = candidates
+  scoreCandidates(candidates, recentEntries, requestedCategory) {
+    const recentSignatures = recentEntries
+      .slice(0, 18)
+      .map((entry) => buildPromptSignature(entry.text))
+      .filter((signature) => signature.size > 0);
+    const recentCategories = recentEntries.slice(0, 8).map((entry) => entry.category);
+    const recentGames = recentEntries.slice(0, 8).map((entry) => entry.game);
+
+    return candidates
       .map((prompt) => {
-        const signature = buildPromptSignature(prompt);
+        const signature = buildPromptSignature(prompt.text);
         const overlap = recentSignatures.reduce((maxOverlap, recentSignature) => {
           return Math.max(maxOverlap, scoreSignatureOverlap(signature, recentSignature));
         }, 0);
+        const categoryPenalty = requestedCategory === "any" && recentCategories.includes(prompt.category) ? 0.16 : 0;
+        const gamePenalty = recentGames.includes(prompt.game) ? 0.05 : 0;
 
         return {
           prompt,
-          overlap,
+          overlap: overlap + categoryPenalty + gamePenalty,
         };
       })
       .sort((left, right) => left.overlap - right.overlap);
-
-    const preferredCandidates = scoredCandidates.filter((entry) => entry.overlap < 0.45);
-    const selectionPool = (preferredCandidates.length > 0 ? preferredCandidates : scoredCandidates)
-      .slice(0, 60)
-      .map((entry) => entry.prompt);
-
-    return pickRandom(selectionPool);
   }
 
-  async getNextPrompt({ mode = "random", channelId, requesterTag = "Unknown" }) {
-    const type = this.resolveType(mode);
-    const channelState = this.getChannelState(channelId);
+  async getNextPrompt({
+    guildId,
+    channelId,
+    game = "random",
+    category = "any",
+    requestedRating,
+    requesterTag = "Unknown",
+  }) {
+    const guildConfig = guildId ? this.store.getGuildConfig(guildId) : DEFAULT_GUILD_CONFIG;
+    const rating = this.resolveRating(requestedRating, guildConfig);
+    const gameKeys = this.resolveGameKeys(game, guildConfig);
 
-    const usedSet = type === "truth" ? channelState.usedTruth : channelState.usedDare;
-    const pool = this.getPool(type);
+    if (gameKeys.length === 0) {
+      throw new Error("All selected games are disabled for this server.");
+    }
 
-    let text = this.selectPromptFromPool(pool, usedSet, channelState.history);
-    let source = "local";
+    const disabledCategories = new Set(guildConfig.disabledCategories || []);
+    const blacklistedKeys = this.store.getBlacklistedKeys();
+    const recentChannelEntries = this.store.getRecentPromptEntries({
+      guildId,
+      channelId,
+      games: gameKeys,
+      limit: Math.min(40, this.recentHistoryLimit),
+      scope: "channel",
+    });
+    const recentGuildEntries = this.store.getRecentPromptEntries({
+      guildId,
+      games: gameKeys,
+      limit: Math.min(120, this.recentHistoryLimit + 40),
+      scope: "guild",
+    });
+    const recentChannelKeys = new Set(
+      this.store.getRecentPromptKeys({
+        guildId,
+        channelId,
+        games: gameKeys,
+        limit: this.recentHistoryLimit,
+        scope: "channel",
+      }),
+    );
+    const recentGuildKeys = new Set(
+      this.store.getRecentPromptKeys({
+        guildId,
+        games: gameKeys,
+        limit: this.recentHistoryLimit + 60,
+        scope: "guild",
+      }),
+    );
+    const usedChannelKeys = new Set(
+      this.store.getUsedPromptKeys({
+        guildId,
+        channelId,
+        games: gameKeys,
+        scope: "channel",
+      }),
+    );
+    const usedGuildKeys = new Set(
+      this.store.getUsedPromptKeys({
+        guildId,
+        games: gameKeys,
+        scope: "guild",
+      }),
+    );
+    const recentEntries = [
+      ...recentChannelEntries,
+      ...recentGuildEntries.filter((entry) => !recentChannelKeys.has(entry.key)),
+    ].slice(0, 80);
+    const recentTexts = recentEntries.map((entry) => entry.text);
 
-    if (!text && this.aiPromptService) {
-      const recent = channelState.history
-        .slice(0, 25)
-        .map((key) => pool.find((prompt) => normalizeText(prompt) === key))
-        .filter(Boolean);
+    const matching = this.catalog.filter((prompt) => {
+      if (!gameKeys.includes(prompt.game)) {
+        return false;
+      }
+      if (prompt.rating !== rating) {
+        return false;
+      }
+      if (category !== "any" && prompt.category !== category) {
+        return false;
+      }
+      if (disabledCategories.has(prompt.category)) {
+        return false;
+      }
+      if (blacklistedKeys.has(prompt.key)) {
+        return false;
+      }
+      if (prompt.text.length > guildConfig.maxPromptLength) {
+        return false;
+      }
 
+      return true;
+    });
+
+    const unseenChannelCandidates = matching.filter((prompt) => !usedChannelKeys.has(prompt.key));
+    const unseenGuildCandidates = matching.filter((prompt) => !usedGuildKeys.has(prompt.key));
+    const unseenAnywhereCandidates = unseenChannelCandidates.filter((prompt) => !usedGuildKeys.has(prompt.key));
+    const notRecentChannelCandidates = matching.filter((prompt) => !recentChannelKeys.has(prompt.key));
+    const notRecentGuildCandidates = matching.filter((prompt) => !recentGuildKeys.has(prompt.key));
+    const notRecentAnywhereCandidates = matching.filter((prompt) => {
+      return !recentChannelKeys.has(prompt.key) && !recentGuildKeys.has(prompt.key);
+    });
+    const candidatePool = unseenAnywhereCandidates.length > 0
+      ? unseenAnywhereCandidates
+      : unseenChannelCandidates.length > 0
+        ? unseenChannelCandidates
+        : unseenGuildCandidates.length > 0
+          ? unseenGuildCandidates
+          : notRecentAnywhereCandidates.length > 0
+            ? notRecentAnywhereCandidates
+            : notRecentChannelCandidates.length > 0
+              ? notRecentChannelCandidates
+              : notRecentGuildCandidates.length > 0
+                ? notRecentGuildCandidates
+                : matching;
+    const scoredCandidates = this.scoreCandidates(candidatePool, recentEntries, category);
+    const preferredCandidates = scoredCandidates.filter((entry) => entry.overlap < 0.48);
+    const selectionPool = (preferredCandidates.length > 0 ? preferredCandidates : scoredCandidates)
+      .slice(0, 48)
+      .map((entry) => entry.prompt);
+
+    let selected = pickRandom(selectionPool);
+    let source = "catalog";
+
+    if (!selected && this.aiPromptService && this.aiPromptService.enabled) {
+      const aiGame = pickRandom(gameKeys);
+      const aiCategory = category === "any"
+        ? pickRandom(Object.keys(CATEGORY_LABELS))
+        : category;
       const aiPrompt = await this.aiPromptService.generatePrompt({
-        type,
-        recentPrompts: recent,
+        game: aiGame,
+        category: aiCategory,
+        rating,
+        recentPrompts: recentTexts,
+        maxLength: guildConfig.maxPromptLength,
       });
 
-      if (aiPrompt && !containsBlockedWords(aiPrompt)) {
-        text = aiPrompt;
+      if (aiPrompt) {
+        selected = {
+          game: aiGame,
+          category: aiCategory,
+          rating,
+          text: aiPrompt,
+          key: normalizeText(`${aiGame}|${aiCategory}|${rating}|${aiPrompt}`),
+        };
         source = "ai";
       }
     }
 
-    if (!text) {
-      text = type === "truth"
-        ? "What is the most simp thing you have done but still deny?"
-        : "Draft a clean flirty IG reply in one line.";
+    if (!selected) {
+      const fallbackGame = gameKeys[0];
+      selected = {
+        game: fallbackGame,
+        category: category === "any" ? "funny" : category,
+        rating,
+        text: fallbackGame === "dare"
+          ? "Give a dramatic 20-second speech about your day."
+          : "What is one thing you would improve this week?",
+        key: normalizeText(`${fallbackGame}|${category}|${rating}|fallback`),
+      };
       source = "fallback";
     }
 
-    const textKey = normalizeText(text);
-    if (type === "truth") {
-      channelState.usedTruth.add(textKey);
-    } else {
-      channelState.usedDare.add(textKey);
-    }
-    this.pushHistory(channelState, textKey);
+    const finalPrompt = await this.maybeRewritePrompt({
+      prompt: { ...selected, source },
+      recentTexts,
+      maxPromptLength: guildConfig.maxPromptLength,
+    });
 
     return {
-      id: shortId(type),
-      type,
-      text,
+      id: shortId(finalPrompt.game),
+      game: finalPrompt.game,
+      gameLabel: GAME_LABELS[finalPrompt.game] || finalPrompt.game,
+      category: finalPrompt.category,
+      categoryLabel: CATEGORY_LABELS[finalPrompt.category] || finalPrompt.category,
+      rating: finalPrompt.rating,
+      text: finalPrompt.text,
+      key: finalPrompt.key,
       requesterTag,
-      rating: "PG-13",
-      source,
+      source: finalPrompt.source || source,
     };
   }
 }

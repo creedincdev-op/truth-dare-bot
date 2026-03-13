@@ -1,63 +1,81 @@
 # Truth & Dare Bot (Discord)
 
-High-variety Discord Truth or Dare bot with:
-- Huge local prompt pool (truth + dare)
-- Low-repeat engine per channel
-- Pop-culture and crush-aware prompt mix without explicit content
-- Optional AI fallback for fresh prompts when needed
-- Interactive button panel (`Truth`, `Dare`, `Random`)
+Node-based Discord game bot with:
 
-## 1) Install
+- `/truthordare` as the main command
+- separate easy-to-find commands for Truth, Dare, Would You Rather, Never Have I Ever, Paranoia, Icebreaker, Challenge, and Hot Take
+- `PG`, `PG13`, and `R` rating filters
+- category filters and a separate `/todcategory` browser command
+- Persistent no-repeat history, reports, blacklist, sessions, and schedules in `data/bot.sqlite`
+- Session modes: `classic`, `battle`, `streak`, `timer`
+- Daily autopost scheduler
+- Optional OpenAI prompt generation / rewrite fallback
 
-```bash
-pip install -r requirements.txt
-```
-
-## 2) Configure
-
-Copy `.env.example` to `.env` and set:
-
-- `DISCORD_TOKEN`: Bot token
-- `DISCORD_CLIENT_ID`: Optional app ID reference
-- `DISCORD_GUILD_ID`: Optional (recommended for instant test command updates)
-- `OPENAI_API_KEY`: Optional (enables AI-generated fresh prompts)
-- `OPENAI_MODEL`: Optional, defaults to `gpt-4.1-mini`
-- `BOT_LOGIN_429_COOLDOWN`: Optional login cooldown after Discord rate limits startup, defaults to `1800`
-- `BOT_LOGIN_429_COOLDOWN_MAX`: Optional max login cooldown, defaults to `7200`
-- `BOT_RESTART_BACKOFF_INITIAL`: Optional supervisor restart backoff, defaults to `900`
-- `BOT_RESTART_BACKOFF_MAX`: Optional max supervisor restart backoff, defaults to `7200`
-- `BOT_STARTUP_JITTER_MAX`: Optional startup jitter, defaults to `45`
-
-## 3) Run
+## Install
 
 ```bash
-python render_start.py
+npm install
 ```
 
-## Render Hosting
+## Configure
 
-- Runtime: `Python 3`
-- Build command: `pip install -r requirements.txt`
-- Start command: `python render_start.py`
-- Health check path: `/healthz`
-- Keepalive monitor: `/healthz`
-- Discord status check: `/health`
-- Blueprint config: `render.yaml`
+Use `.env.example` as the base for `.env`.
+
+Required:
+
+- `DISCORD_TOKEN`
+- `DISCORD_CLIENT_ID`
+
+Optional:
+
+- `DISCORD_GUILD_ID`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `BOT_DB_FILE`
+- `DEFAULT_TIMEZONE`
+- `SCHEDULER_INTERVAL_SECONDS`
+- `BOT_LOGIN_429_COOLDOWN`
+- `BOT_LOGIN_429_COOLDOWN_MAX`
+- `BOT_RESTART_BACKOFF_INITIAL`
+- `BOT_RESTART_BACKOFF_MAX`
+- `BOT_RAPID_EXIT_SECONDS`
+- `BOT_STARTUP_JITTER_MAX`
+
+## Run
+
+```bash
+npm start
+```
+
+For Windows, use `start.bat`.
 
 ## Commands
 
-- `/truthordare` with optional `mode` (`random`, `truth`, `dare`)
-- `/todstats` to inspect prompt pool + anti-repeat status
+- `/truthordare` - main play command with game, category, rating, and mode options
+- `/truth` - truth only
+- `/dare` - dare only
+- `/wouldyourather` - would you rather only
+- `/neverhaveiever` - never have I ever only
+- `/paranoia` - paranoia only
+- `/icebreaker` - icebreaker only
+- `/challenge` - challenge only
+- `/hottake` - hot take only
+- `/todbattle` - tracked battle session
+- `/todstreak` - tracked streak session
+- `/todtimer` - tracked timer session
+- `/todcategory` - list available categories for a game/rating
+- `/todconfig` - server config for default rating, timeout, prompt length, disabled games/categories
+- `/todautopost` - create, list, or delete daily drop schedules
+- `/todstats` - pool, blacklist, usage, and schedule stats
 
 ## Notes
 
-- Prompt pool is shipped as `data/prompt_pools.json` and loaded directly by the Python bot.
-- The tone mixes crush, celeb, ex, and social-media prompts with general fun prompts instead of making the whole bot one style.
-- The bot avoids recent repeats per channel by tracking history and used prompt keys.
-- AI is optional. If no OpenAI key is configured, bot uses local pool only.
-- Prompt safety filter blocks explicit sexual content, drugs, and profanity.
-- `python render_start.py` now follows the same Render pattern as the CLINX bot: a parent supervisor keeps `/healthz` online and restarts the Discord child only if the child exits.
-- The Discord child process handles login `429` cooldowns internally instead of forcing Render restart loops.
+- Prompt buttons expire automatically using the guild timeout config.
+- Reports blacklist prompt IDs immediately so bad prompts stop reappearing.
+- Prompts do not repeat in the same channel until that filtered prompt pool has been exhausted.
+- Session modes keep scores in persistent storage.
+- The supervisor entrypoint is `render_start.js`; it keeps health checks alive and restarts the bot child if needed.
+- Secrets belong only in `.env`. Rotate the Discord token if it was shared anywhere public.
 
 ## Suggested Discord Permissions
 
@@ -66,10 +84,7 @@ python render_start.py
 - `Embed Links`
 - `Read Message History`
 - `Use Application Commands`
-## Quick Start (Windows)
 
-Double-click `start.bat` to install Python dependencies and start the supervised bot.
+## Developer Portal
 
-## Developer Portal Checklist
-
-See `DISCORD_PORTAL_SETUP.md` for exact toggles/scopes/permissions.
+See `DISCORD_PORTAL_SETUP.md`.

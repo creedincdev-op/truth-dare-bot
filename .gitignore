@@ -3,5 +3,9 @@ node_modules/
 *-debug-*.log
 data/render_runtime_state.json
 data/runtime_status.json
+data/*.sqlite
+data/*.sqlite-journal
+data/*.sqlite-shm
+data/*.sqlite-wal
 __pycache__/
 *.pyc

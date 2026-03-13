@@ -30,6 +30,9 @@ const config = {
   discordGuildId: readFirstEnv(["DISCORD_GUILD_ID", "GUILD_ID"]),
   openAIApiKey: readEnv("OPENAI_API_KEY"),
   openAIModel: readEnv("OPENAI_MODEL", "gpt-4.1-mini"),
+  databaseFile: readEnv("BOT_DB_FILE", "data/bot.sqlite"),
+  defaultTimezone: readEnv("DEFAULT_TIMEZONE", "Asia/Calcutta"),
+  schedulerIntervalSeconds: Number(readEnv("SCHEDULER_INTERVAL_SECONDS", "45")) || 45,
 };
 
 function assertConfig() {

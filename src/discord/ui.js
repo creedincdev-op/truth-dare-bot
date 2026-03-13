@@ -4,61 +4,167 @@ const {
   ButtonStyle,
   EmbedBuilder,
 } = require("discord.js");
+const { CATEGORY_LABELS, GAME_COLORS, GAME_LABELS } = require("../questions/catalog");
 
-const TYPE_STYLES = {
-  truth: {
-    label: "Truth",
-    color: 0x2ecc71,
-    buttonStyle: ButtonStyle.Success,
-  },
-  dare: {
-    label: "Dare",
-    color: 0xe74c3c,
-    buttonStyle: ButtonStyle.Danger,
-  },
-};
+function formatRequester(requester) {
+  if (!requester) {
+    return null;
+  }
 
-function createPromptEmbed(prompt, requesterUser) {
-  const style = TYPE_STYLES[prompt.type] || TYPE_STYLES.truth;
-  const requesterName = requesterUser?.globalName || requesterUser?.username || prompt.requesterTag;
-  const avatarUrl = requesterUser?.displayAvatarURL?.({ size: 64 }) || null;
+  if (typeof requester === "string") {
+    return { label: requester, avatarUrl: null };
+  }
+
+  if (requester.label) {
+    return requester;
+  }
+
+  return {
+    label: requester.globalName || requester.username || "Unknown",
+    avatarUrl: requester.displayAvatarURL ? requester.displayAvatarURL({ size: 64 }) : null,
+  };
+}
+
+function createPromptEmbed(prompt, requester) {
+  const requesterMeta = formatRequester(requester);
+  const color = GAME_COLORS[prompt.game] || 0x5865f2;
+  const footerParts = [];
+  const gameLabel = GAME_LABELS[prompt.game] || prompt.game;
+  const categoryLabel = CATEGORY_LABELS[prompt.category] || prompt.category;
+
+  if (prompt.game === "truth" || prompt.game === "dare") {
+    footerParts.push(`Type: ${prompt.game.toUpperCase()}`);
+  } else {
+    footerParts.push(`Category: ${categoryLabel.toUpperCase()}`);
+  }
+
+  if (prompt.game === "truth" || prompt.game === "dare") {
+    footerParts.push(`Category: ${categoryLabel.toUpperCase()}`);
+  }
+  footerParts.push(`Rating: ${prompt.rating}`);
+  footerParts.push(`ID: ${prompt.id}`);
 
   const embed = new EmbedBuilder()
-    .setColor(style.color)
-    // Put the question in title for the largest embed text size Discord supports.
+    .setColor(color)
     .setTitle(prompt.text)
-    .setFooter({
-      text: `Type: ${style.label.toUpperCase()} | Rating: ${prompt.rating} | ID: ${prompt.id}`,
-    });
+    .setFooter({ text: footerParts.join(" | ") });
 
-  if (requesterName) {
+  if (requesterMeta && requesterMeta.label) {
     embed.setAuthor({
-      name: `Requested by ${requesterName}`,
-      iconURL: avatarUrl || undefined,
+      name: (prompt.game === "truth" || prompt.game === "dare")
+        ? `Requested by ${requesterMeta.label}`
+        : `${gameLabel} • Requested by ${requesterMeta.label}`,
+      iconURL: requesterMeta.avatarUrl || undefined,
     });
   }
 
   return embed;
 }
 
-function createPromptButtons() {
+function createPromptButtons(prompt) {
+  if (prompt.game === "truth" || prompt.game === "dare") {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`prompt|truth|${prompt.rating}|${prompt.category}`)
+        .setLabel("Truth")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`prompt|dare|${prompt.rating}|${prompt.category}`)
+        .setLabel("Dare")
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`prompt|truth_or_dare|${prompt.rating}|${prompt.category}`)
+        .setLabel("Random")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`report|${prompt.id}`)
+        .setLabel("Report")
+        .setStyle(ButtonStyle.Secondary),
+    );
+  }
+
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("tod:truth")
-      .setLabel("Truth")
-      .setStyle(TYPE_STYLES.truth.buttonStyle),
+      .setCustomId(`prompt|${prompt.game}|${prompt.rating}|${prompt.category}`)
+      .setLabel("Another")
+      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId("tod:dare")
-      .setLabel("Dare")
-      .setStyle(TYPE_STYLES.dare.buttonStyle),
+      .setCustomId(`prompt|${prompt.game}|${prompt.rating}|any`)
+      .setLabel("Any Category")
+      .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId("tod:random")
-      .setLabel("Random")
-      .setStyle(ButtonStyle.Primary)
+      .setCustomId(`report|${prompt.id}`)
+      .setLabel("Report")
+      .setStyle(ButtonStyle.Secondary),
   );
 }
 
+function createSessionEmbed(sessionService, session) {
+  const summary = sessionService.buildSessionSummary(session);
+  const prompt = session.state.prompt;
+  const gameLabel = GAME_LABELS[session.game] || session.game;
+  const categoryLabel = CATEGORY_LABELS[prompt.category] || prompt.category;
+
+  return new EmbedBuilder()
+    .setColor(GAME_COLORS[prompt.game] || 0x5865f2)
+    .setTitle(summary.title)
+    .setDescription([
+      `**Current prompt**`,
+      prompt.text,
+      "",
+      `Game: **${gameLabel}** | Category: **${categoryLabel}** | Rating: **${session.rating}**`,
+      summary.roundLabel,
+      "",
+      `**Leaderboard**`,
+      summary.leaderboard,
+    ].join("\n"));
+}
+
+function createSessionButtons(session) {
+  const buttons = [
+    new ButtonBuilder()
+      .setCustomId(`session|join|${session.sessionId}`)
+      .setLabel("Join")
+      .setStyle(ButtonStyle.Secondary),
+  ];
+
+  if (session.mode === "streak") {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(`session|complete|${session.sessionId}`)
+        .setLabel("Complete")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`session|miss|${session.sessionId}`)
+        .setLabel("Miss")
+        .setStyle(ButtonStyle.Danger),
+    );
+  } else {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(`session|complete|${session.sessionId}`)
+        .setLabel("Complete +1")
+        .setStyle(ButtonStyle.Success),
+    );
+  }
+
+  buttons.push(
+    new ButtonBuilder()
+      .setCustomId(`session|next|${session.sessionId}`)
+      .setLabel("Next")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`session|end|${session.sessionId}`)
+      .setLabel("End")
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  return new ActionRowBuilder().addComponents(buttons);
+}
+
 module.exports = {
-  createPromptEmbed,
   createPromptButtons,
+  createPromptEmbed,
+  createSessionButtons,
+  createSessionEmbed,
 };

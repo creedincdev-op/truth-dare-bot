@@ -61,10 +61,10 @@ function saveRuntimeState(runtimeState) {
 }
 
 const port = readIntEnv("PORT", 10000, 1);
-const initialBackoffSeconds = readIntEnv("BOT_RESTART_BACKOFF_INITIAL", 900, 60);
-const maxBackoffSeconds = readIntEnv("BOT_RESTART_BACKOFF_MAX", 7200, initialBackoffSeconds);
-const rapidExitThresholdSeconds = readIntEnv("BOT_RAPID_EXIT_SECONDS", 180, 30);
-const startupJitterMaxSeconds = readIntEnv("BOT_STARTUP_JITTER_MAX", 45, 0);
+const initialBackoffSeconds = readIntEnv("BOT_RESTART_BACKOFF_INITIAL", 60, 15);
+const maxBackoffSeconds = readIntEnv("BOT_RESTART_BACKOFF_MAX", 900, initialBackoffSeconds);
+const rapidExitThresholdSeconds = readIntEnv("BOT_RAPID_EXIT_SECONDS", 60, 15);
+const startupJitterMaxSeconds = readIntEnv("BOT_STARTUP_JITTER_MAX", 0, 0);
 
 const runtimeState = {
   discordReady: false,
