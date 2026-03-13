@@ -10,6 +10,10 @@ const { registerCommands } = require("./discord/registerCommands");
 const {
   createPromptEmbed,
   createPromptButtons,
+  createParanoiaAnswerButtons,
+  createParanoiaAnswerModal,
+  createParanoiaDmEmbed,
+  createParanoiaRevealEmbed,
   createSessionButtons,
   createSessionEmbed,
 } = require("./discord/ui");
@@ -23,11 +27,13 @@ const { AIPromptService } = require("./services/aiPromptService");
 const { SchedulerService } = require("./services/schedulerService");
 const { SessionService } = require("./services/sessionService");
 const { BotStore } = require("./services/store");
+const { shortId } = require("./utils/random");
+const { sanitizePrompt } = require("./utils/textFilters");
 
 assertConfig();
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages],
 });
 
 let store;
@@ -50,17 +56,7 @@ let startupTimeout = null;
 const PLAY_COMMAND_DEFAULTS = {
   truth: { game: "truth", mode: "classic" },
   dare: { game: "dare", mode: "classic" },
-  wyr: { game: "would_you_rather", mode: "classic" },
-  wouldyourather: { game: "would_you_rather", mode: "classic" },
-  nhie: { game: "never_have_i_ever", mode: "classic" },
-  neverhaveiever: { game: "never_have_i_ever", mode: "classic" },
-  paranoia: { game: "paranoia", mode: "classic" },
-  icebreaker: { game: "icebreaker", mode: "classic" },
-  challenge: { game: "challenge", mode: "classic" },
-  hottake: { game: "hot_take", mode: "classic" },
-  todbattle: { game: "truth_or_dare", mode: "battle" },
-  todstreak: { game: "truth_or_dare", mode: "streak" },
-  todtimer: { game: "truth_or_dare", mode: "timer" },
+  neverever: { game: "never_have_i_ever", mode: "classic" },
 };
 
 function sendStatus(update) {
@@ -218,10 +214,14 @@ async function handlePlayCommand(interaction, defaults = {}) {
   ensureGuildInteraction(interaction);
   await interaction.deferReply();
 
-  const game = interaction.options.getString("game") || defaults.game || "random";
+  const game = interaction.commandName === "truthordare"
+    ? interaction.options.getString("type") || defaults.game || "truth_or_dare"
+    : defaults.game || "truth_or_dare";
   const category = interaction.options.getString("category") || "any";
   const rating = interaction.options.getString("rating") || null;
-  const mode = interaction.options.getString("mode") || defaults.mode || "classic";
+  const mode = interaction.commandName === "truthordare"
+    ? interaction.options.getString("mode") || defaults.mode || "classic"
+    : defaults.mode || "classic";
 
   if (mode === "classic") {
     const prompt = await resolvePromptFromInteraction({
@@ -443,6 +443,213 @@ async function handleStatsCommand(interaction) {
       `Default rating: **${guildConfig.defaultRating}** | Timeout: **${guildConfig.buttonTimeoutSeconds}s**`,
     ].join("\n"),
   });
+}
+
+function isActiveParanoiaRound(round) {
+  return Boolean(round) && ["pending_dm", "awaiting_answer"].includes(round.status);
+}
+
+async function handleParanoiaCommand(interaction) {
+  ensureGuildInteraction(interaction);
+  await interaction.deferReply();
+
+  const target = interaction.options.getUser("target", true);
+  if (!target || target.bot) {
+    await interaction.editReply({ content: "Pick a real user. Bots cannot receive paranoia rounds." });
+    return;
+  }
+
+  if (target.id === interaction.user.id) {
+    await interaction.editReply({ content: "Pick someone else for paranoia. You cannot target yourself." });
+    return;
+  }
+
+  const prompt = await resolvePromptFromInteraction({
+    guildId: interaction.guildId,
+    channelId: interaction.channelId,
+    userTag: interaction.user.tag,
+    game: "paranoia",
+    category: "any",
+    rating: interaction.options.getString("rating") || null,
+  });
+
+  const roundId = shortId("paranoia");
+  const round = {
+    roundId,
+    guildId: interaction.guildId,
+    channelId: interaction.channelId,
+    requesterId: interaction.user.id,
+    targetUserId: target.id,
+    prompt,
+    status: "pending_dm",
+    state: {
+      prompt,
+      requesterLabel: interaction.user.globalName || interaction.user.username || interaction.user.id,
+      targetLabel: target.globalName || target.username || target.id,
+      ackMessageId: null,
+      dmChannelId: null,
+      dmMessageId: null,
+      answerText: null,
+      revealMessageId: null,
+    },
+  };
+
+  store.createParanoiaRound(round);
+
+  let dmMessage;
+  try {
+    dmMessage = await target.send({
+      embeds: [createParanoiaDmEmbed(round, interaction.user)],
+      components: [createParanoiaAnswerButtons(roundId)],
+    });
+  } catch (error) {
+    store.updateParanoiaRound(roundId, (current) => ({
+      ...current,
+      status: "failed_dm",
+      state: {
+        ...current.state,
+        failureReason: "dm_closed",
+      },
+    }));
+
+    await interaction.editReply({
+      content: "I could not DM that user. Ask them to enable DMs and try again.",
+    });
+    return;
+  }
+
+  store.recordPromptEmission(prompt, {
+    guildId: interaction.guildId,
+    channelId: interaction.channelId,
+    requesterId: interaction.user.id,
+  });
+
+  const ackMessage = await interaction.editReply({
+    content: "Paranoia question sent. The anonymous answer will show up here once they reply.",
+  });
+
+  store.updateParanoiaRound(roundId, (current) => ({
+    ...current,
+    status: "awaiting_answer",
+    state: {
+      ...current.state,
+      ackMessageId: ackMessage.id,
+      dmChannelId: dmMessage.channelId,
+      dmMessageId: dmMessage.id,
+    },
+  }));
+}
+
+async function handleParanoiaAnswerButton(interaction) {
+  const [, roundId] = interaction.customId.split("|");
+  const round = store.getParanoiaRound(roundId);
+
+  if (!isActiveParanoiaRound(round)) {
+    await interaction.reply({ content: "That paranoia round is no longer active." });
+    return;
+  }
+
+  if (interaction.user.id !== round.targetUserId) {
+    await interaction.reply({ content: "That paranoia round is not for you." });
+    return;
+  }
+
+  await interaction.showModal(createParanoiaAnswerModal(roundId));
+}
+
+async function completeParanoiaDmMessage(round) {
+  if (!round.state.dmChannelId || !round.state.dmMessageId) {
+    return;
+  }
+
+  try {
+    const dmChannel = await client.channels.fetch(round.state.dmChannelId);
+    if (!dmChannel || !dmChannel.isTextBased()) {
+      return;
+    }
+
+    const dmMessage = await dmChannel.messages.fetch(round.state.dmMessageId);
+    if (dmMessage.editable) {
+      await dmMessage.edit({ components: [] });
+    }
+  } catch (error) {
+    console.error("Failed to clean up paranoia DM message:", error.message);
+  }
+}
+
+async function handleParanoiaAnswerModal(interaction) {
+  const [, roundId] = interaction.customId.split("|");
+  const round = store.getParanoiaRound(roundId);
+
+  if (!isActiveParanoiaRound(round)) {
+    await interaction.reply({ content: "That paranoia round is no longer active." });
+    return;
+  }
+
+  if (interaction.user.id !== round.targetUserId) {
+    await interaction.reply({ content: "That paranoia round is not for you." });
+    return;
+  }
+
+  const answerText = sanitizePrompt(interaction.fields.getTextInputValue("answer")).slice(0, 220);
+  if (!answerText) {
+    await interaction.reply({ content: "Please send a real answer." });
+    return;
+  }
+
+  let revealMessage = null;
+  try {
+    const channel = await client.channels.fetch(round.channelId);
+    if (!channel || !channel.isTextBased()) {
+      throw new Error("Original channel is gone.");
+    }
+
+    revealMessage = await channel.send({
+      embeds: [createParanoiaRevealEmbed(round, answerText)],
+    });
+
+    if (round.state.ackMessageId) {
+      try {
+        const ackMessage = await channel.messages.fetch(round.state.ackMessageId);
+        if (ackMessage.editable) {
+          await ackMessage.edit({
+            content: "Paranoia answer received. Anonymous reveal dropped below.",
+          });
+        }
+      } catch (error) {
+        console.error("Failed to update paranoia ack message:", error.message);
+      }
+    }
+  } catch (error) {
+    store.updateParanoiaRound(roundId, (current) => ({
+      ...current,
+      status: "answer_failed",
+      state: {
+        ...current.state,
+        answerText,
+        failureReason: "channel_missing",
+      },
+    }));
+
+    await interaction.reply({
+      content: "I got your answer, but I could not post it back in the original channel.",
+    });
+    return;
+  }
+
+  store.updateParanoiaRound(roundId, (current) => ({
+    ...current,
+    status: "answered",
+    state: {
+      ...current.state,
+      answerText,
+      answeredAt: Date.now(),
+      revealMessageId: revealMessage ? revealMessage.id : null,
+    },
+  }));
+
+  await completeParanoiaDmMessage(round);
+  await interaction.reply({ content: "Answer sent anonymously." });
 }
 
 async function handlePromptButton(interaction) {
@@ -706,6 +913,11 @@ client.on("interactionCreate", async (interaction) => {
         return;
       }
 
+      if (interaction.commandName === "paranoia") {
+        await handleParanoiaCommand(interaction);
+        return;
+      }
+
       if (Object.prototype.hasOwnProperty.call(PLAY_COMMAND_DEFAULTS, interaction.commandName)) {
         await handlePlayCommand(interaction, PLAY_COMMAND_DEFAULTS[interaction.commandName]);
         return;
@@ -734,6 +946,11 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.isButton()) {
+      if (interaction.customId.startsWith("paranoia-answer|")) {
+        await handleParanoiaAnswerButton(interaction);
+        return;
+      }
+
       if (interaction.customId.startsWith("prompt|")) {
         await handlePromptButton(interaction);
         return;
@@ -746,6 +963,12 @@ client.on("interactionCreate", async (interaction) => {
 
       if (interaction.customId.startsWith("session|")) {
         await handleSessionButton(interaction);
+      }
+    }
+
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith("paranoia-modal|")) {
+        await handleParanoiaAnswerModal(interaction);
       }
     }
   } catch (error) {

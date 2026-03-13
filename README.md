@@ -1,12 +1,12 @@
 # Truth & Dare Bot (Discord)
 
-Node-based Discord game bot with:
+Node-based Discord game bot focused on premium-feeling Truth, Dare, Never Have I Ever, and Paranoia rounds:
 
 - `/truthordare` as the main command
-- separate easy-to-find commands for Truth, Dare, Would You Rather, Never Have I Ever, Paranoia, Icebreaker, Challenge, and Hot Take
+- separate easy-to-find commands for Truth, Dare, Never Have I Ever, and Paranoia
 - `PG`, `PG13`, and `R` rating filters
 - category filters and a separate `/todcategory` browser command
-- Persistent no-repeat history, reports, blacklist, sessions, and schedules in `data/bot.sqlite`
+- Persistent no-repeat history, reports, blacklist, Paranoia rounds, sessions, and schedules in `data/bot.sqlite`
 - Session modes: `classic`, `battle`, `streak`, `timer`
 - Daily autopost scheduler
 - Optional OpenAI prompt generation / rewrite fallback
@@ -51,18 +51,11 @@ For Windows, use `start.bat`.
 
 ## Commands
 
-- `/truthordare` - main play command with game, category, rating, and mode options
+- `/truthordare` - main Truth or Dare command with type, category, rating, and mode options
 - `/truth` - truth only
 - `/dare` - dare only
-- `/wouldyourather` - would you rather only
-- `/neverhaveiever` - never have I ever only
-- `/paranoia` - paranoia only
-- `/icebreaker` - icebreaker only
-- `/challenge` - challenge only
-- `/hottake` - hot take only
-- `/todbattle` - tracked battle session
-- `/todstreak` - tracked streak session
-- `/todtimer` - tracked timer session
+- `/neverever` - never have I ever only
+- `/paranoia` - sends a private paranoia question to a selected user and reveals the answer anonymously back in the server
 - `/todcategory` - list available categories for a game/rating
 - `/todconfig` - server config for default rating, timeout, prompt length, disabled games/categories
 - `/todautopost` - create, list, or delete daily drop schedules
@@ -73,6 +66,7 @@ For Windows, use `start.bat`.
 - Prompt buttons expire automatically using the guild timeout config.
 - Reports blacklist prompt IDs immediately so bad prompts stop reappearing.
 - Prompts do not repeat in the same channel until that filtered prompt pool has been exhausted.
+- Paranoia uses a DM answer flow and posts the answer back without naming the target.
 - Session modes keep scores in persistent storage.
 - The supervisor entrypoint is `render_start.js`; it keeps health checks alive and restarts the bot child if needed.
 - Secrets belong only in `.env`. Rotate the Discord token if it was shared anywhere public.

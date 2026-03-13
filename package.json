@@ -1,12 +1,12 @@
 {
   "name": "truth-dare-bot",
   "version": "1.0.0",
-  "description": "Discord Truth or Dare bot with massive low-repeat prompt variety and optional AI generation.",
+  "description": "Discord Truth or Dare bot focused on Truth, Dare, Never Have I Ever, and Paranoia with strong anti-repeat logic.",
   "main": "render_start.js",
   "type": "commonjs",
   "scripts": {
     "start": "node render_start.js",
-    "check": "node --check render_start.js && node --check src/bot.js && node --check src/index.js"
+    "check": "node --check render_start.js && node --check src/index.js && node --check src/bot.js && node --check src/discord/commands.js && node --check src/discord/ui.js && node --check src/questions/catalog.js && node --check src/questions/promptEngine.js && node --check src/services/aiPromptService.js && node --check src/services/schedulerService.js && node --check src/services/sessionService.js && node --check src/services/store.js && node --check src/utils/random.js && node --check src/utils/textFilters.js"
   },
   "engines": {
     "node": ">=20.0.0"

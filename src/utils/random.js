@@ -11,6 +11,33 @@ function pickRandom(items) {
   return items[randomInt(items.length)];
 }
 
+function pickWeightedRandom(items, getWeight) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return null;
+  }
+
+  const weighted = items.map((item) => ({
+    item,
+    weight: Math.max(0, Number(getWeight(item)) || 0),
+  })).filter((entry) => entry.weight > 0);
+
+  if (weighted.length === 0) {
+    return pickRandom(items);
+  }
+
+  const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+  let cursor = Math.random() * totalWeight;
+
+  for (const entry of weighted) {
+    cursor -= entry.weight;
+    if (cursor <= 0) {
+      return entry.item;
+    }
+  }
+
+  return weighted[weighted.length - 1].item;
+}
+
 function shuffle(items) {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i -= 1) {
@@ -26,6 +53,7 @@ function shortId(prefix = "tod") {
 
 module.exports = {
   pickRandom,
+  pickWeightedRandom,
   shuffle,
   shortId,
 };

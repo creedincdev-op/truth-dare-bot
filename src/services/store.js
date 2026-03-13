@@ -122,6 +122,23 @@ class BotStore {
       CREATE INDEX IF NOT EXISTS idx_sessions_channel
       ON sessions (guild_id, channel_id, status, updated_at DESC);
 
+      CREATE TABLE IF NOT EXISTS paranoia_rounds (
+        round_id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        requester_id TEXT NOT NULL,
+        target_user_id TEXT NOT NULL,
+        prompt_id TEXT NOT NULL,
+        prompt_key TEXT NOT NULL,
+        state_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_paranoia_rounds_target
+      ON paranoia_rounds (target_user_id, status, updated_at DESC);
+
       CREATE TABLE IF NOT EXISTS daily_schedules (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         guild_id TEXT NOT NULL,
@@ -371,6 +388,37 @@ class BotStore {
     return rows.map((row) => row.prompt_key);
   }
 
+  getPromptUsageStats({ guildId, channelId = null, games, scope = "channel" }) {
+    const targetGames = Array.isArray(games) && games.length > 0 ? games : [];
+    if (targetGames.length === 0) {
+      return [];
+    }
+
+    const placeholders = targetGames.map(() => "?").join(", ");
+    const sql = scope === "guild"
+      ? `SELECT prompt_key, COUNT(*) AS use_count, MAX(created_at) AS last_used_at
+         FROM emitted_prompts
+         WHERE guild_id = ?
+           AND game IN (${placeholders})
+         GROUP BY prompt_key`
+      : `SELECT prompt_key, COUNT(*) AS use_count, MAX(created_at) AS last_used_at
+         FROM emitted_prompts
+         WHERE guild_id = ?
+           AND channel_id = ?
+           AND game IN (${placeholders})
+         GROUP BY prompt_key`;
+    const params = scope === "guild"
+      ? [guildId, ...targetGames]
+      : [guildId, channelId, ...targetGames];
+    const rows = this.getRows(sql, params);
+
+    return rows.map((row) => ({
+      key: row.prompt_key,
+      count: Number(row.use_count) || 0,
+      lastUsedAt: Number(row.last_used_at) || 0,
+    }));
+  }
+
   getPromptStats(guildId, channelId) {
     const emitted = this.getRow(
       `SELECT COUNT(*) AS total FROM emitted_prompts WHERE guild_id = ? AND channel_id = ?`,
@@ -531,6 +579,93 @@ class BotStore {
     );
 
     return this.getSession(sessionId);
+  }
+
+  createParanoiaRound(round) {
+    const now = Date.now();
+    this.run(
+      `INSERT INTO paranoia_rounds (
+        round_id,
+        guild_id,
+        channel_id,
+        requester_id,
+        target_user_id,
+        prompt_id,
+        prompt_key,
+        state_json,
+        status,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        round.roundId,
+        round.guildId,
+        round.channelId,
+        round.requesterId,
+        round.targetUserId,
+        round.prompt.id,
+        round.prompt.key,
+        JSON.stringify(round.state || {}),
+        round.status || "pending_dm",
+        now,
+        now,
+      ],
+    );
+  }
+
+  getParanoiaRound(roundId) {
+    const row = this.getRow(
+      `SELECT round_id, guild_id, channel_id, requester_id, target_user_id, prompt_id, prompt_key, state_json, status, created_at, updated_at
+       FROM paranoia_rounds
+       WHERE round_id = ?`,
+      [roundId],
+    );
+
+    if (!row) {
+      return null;
+    }
+
+    const state = fromJson(row.state_json, {});
+    return {
+      roundId: row.round_id,
+      guildId: row.guild_id,
+      channelId: row.channel_id,
+      requesterId: row.requester_id,
+      targetUserId: row.target_user_id,
+      promptId: row.prompt_id,
+      promptKey: row.prompt_key,
+      prompt: state.prompt || null,
+      state,
+      status: row.status,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+    };
+  }
+
+  updateParanoiaRound(roundId, updater) {
+    const round = this.getParanoiaRound(roundId);
+    if (!round) {
+      return null;
+    }
+
+    const next = updater({
+      ...round,
+      state: { ...round.state },
+    });
+
+    this.run(
+      `UPDATE paranoia_rounds
+       SET state_json = ?, status = ?, updated_at = ?
+       WHERE round_id = ?`,
+      [
+        JSON.stringify(next.state),
+        next.status,
+        Date.now(),
+        roundId,
+      ],
+    );
+
+    return this.getParanoiaRound(roundId);
   }
 
   saveSchedule(schedule) {

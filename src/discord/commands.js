@@ -4,6 +4,7 @@ const {
   CATEGORY_CHOICES,
   GAME_CHOICES,
   RATING_CHOICES,
+  TRUTH_OR_DARE_TYPE_CHOICES,
 } = require("../questions/catalog");
 
 function addChoices(option, choices) {
@@ -45,101 +46,45 @@ function buildSingleGameCommand({ name, description }) {
   );
 }
 
-function buildSessionCommand({ name, description, fixedMode }) {
-  const builder = addSharedPromptOptions(
-    new SlashCommandBuilder()
-      .setName(name)
-      .setDescription(description),
-  );
-
-  builder.addStringOption((option) =>
-    addChoices(
-      option
-        .setName("game")
-        .setDescription("Choose a game for this session.")
-        .setRequired(false),
-      GAME_CHOICES,
-    ),
-  );
-
-  if (fixedMode === "timer") {
-    builder.addIntegerOption((option) =>
-      option
-        .setName("duration_minutes")
-        .setDescription("Timer duration in minutes.")
-        .setRequired(false)
-        .setMinValue(1)
-        .setMaxValue(120),
-    );
-  } else {
-    builder.addIntegerOption((option) =>
+const truthOrDareCommand = addSharedPromptOptions(
+  new SlashCommandBuilder()
+    .setName("truthordare")
+    .setDescription("Play an upgraded Truth or Dare round.")
+    .addStringOption((option) =>
+      addChoices(
+        option
+          .setName("type")
+          .setDescription("Pick Truth, Dare, or Random.")
+          .setRequired(false),
+        TRUTH_OR_DARE_TYPE_CHOICES,
+      ),
+    )
+    .addStringOption((option) =>
+      addChoices(
+        option
+          .setName("mode")
+          .setDescription("Classic prompt or a tracked Truth or Dare mode.")
+          .setRequired(false),
+        BUTTON_MODE_CHOICES,
+      ),
+    )
+    .addIntegerOption((option) =>
       option
         .setName("rounds")
-        .setDescription("How many rounds to play.")
+        .setDescription("Rounds for battle or streak mode.")
         .setRequired(false)
         .setMinValue(3)
         .setMaxValue(50),
-    );
-  }
-
-  return builder;
-}
-
-const truthOrDareCommand = new SlashCommandBuilder()
-  .setName("truthordare")
-  .setDescription("Play Truth or Dare, Never Have I Ever, Would You Rather, and more.")
-  .addStringOption((option) =>
-    addChoices(
+    )
+    .addIntegerOption((option) =>
       option
-        .setName("game")
-        .setDescription("Pick a game or leave random.")
-        .setRequired(false),
-      GAME_CHOICES,
+        .setName("duration_minutes")
+        .setDescription("Timer mode duration in minutes.")
+        .setRequired(false)
+        .setMinValue(1)
+        .setMaxValue(120),
     ),
-  )
-  .addStringOption((option) =>
-    addChoices(
-      option
-        .setName("category")
-        .setDescription("Focus on one category or mix them.")
-        .setRequired(false),
-      CATEGORY_CHOICES,
-    ),
-  )
-  .addStringOption((option) =>
-    addChoices(
-      option
-        .setName("rating")
-        .setDescription("Choose the prompt rating.")
-        .setRequired(false),
-      RATING_CHOICES,
-    ),
-  )
-  .addStringOption((option) =>
-    addChoices(
-      option
-        .setName("mode")
-        .setDescription("Classic prompt or a tracked session mode.")
-        .setRequired(false),
-      BUTTON_MODE_CHOICES,
-    ),
-  )
-  .addIntegerOption((option) =>
-    option
-      .setName("rounds")
-      .setDescription("Rounds for battle or streak mode.")
-      .setRequired(false)
-      .setMinValue(3)
-      .setMaxValue(50),
-  )
-  .addIntegerOption((option) =>
-    option
-      .setName("duration_minutes")
-      .setDescription("Timer mode duration in minutes.")
-      .setRequired(false)
-      .setMinValue(1)
-      .setMaxValue(120),
-  );
+);
 
 const truthCommand = buildSingleGameCommand({
   name: "truth",
@@ -151,57 +96,33 @@ const dareCommand = buildSingleGameCommand({
   description: "Get a Dare prompt.",
 });
 
-const wouldYouRatherCommand = buildSingleGameCommand({
-  name: "wouldyourather",
-  description: "Get a Would You Rather prompt.",
-});
-
-const neverHaveIEverCommand = buildSingleGameCommand({
-  name: "neverhaveiever",
+const neverEverCommand = buildSingleGameCommand({
+  name: "neverever",
   description: "Get a Never Have I Ever prompt.",
 });
 
-const paranoiaCommand = buildSingleGameCommand({
-  name: "paranoia",
-  description: "Get a Paranoia prompt.",
-});
-
-const icebreakerCommand = buildSingleGameCommand({
-  name: "icebreaker",
-  description: "Get an Icebreaker prompt.",
-});
-
-const challengeCommand = buildSingleGameCommand({
-  name: "challenge",
-  description: "Get a Challenge prompt.",
-});
-
-const hotTakeCommand = buildSingleGameCommand({
-  name: "hottake",
-  description: "Get a Hot Take prompt.",
-});
-
-const battleCommand = buildSessionCommand({
-  name: "todbattle",
-  description: "Start a battle session with points.",
-  fixedMode: "battle",
-});
-
-const streakCommand = buildSessionCommand({
-  name: "todstreak",
-  description: "Start a streak session.",
-  fixedMode: "streak",
-});
-
-const timerCommand = buildSessionCommand({
-  name: "todtimer",
-  description: "Start a timer-based session.",
-  fixedMode: "timer",
-});
+const paranoiaCommand = new SlashCommandBuilder()
+  .setName("paranoia")
+  .setDescription("Send a paranoia question to a selected user.")
+  .addUserOption((option) =>
+    option
+      .setName("target")
+      .setDescription("User who will receive the paranoia question in DM.")
+      .setRequired(true),
+  )
+  .addStringOption((option) =>
+    addChoices(
+      option
+        .setName("rating")
+        .setDescription("Choose the prompt rating.")
+        .setRequired(false),
+      RATING_CHOICES,
+    ),
+  );
 
 const categoryCommand = new SlashCommandBuilder()
   .setName("todcategory")
-  .setDescription("List available categories and counts for a game/rating.")
+  .setDescription("List available categories and counts for a core game/rating.")
   .addStringOption((option) =>
     addChoices(
       option
@@ -249,7 +170,7 @@ const configCommand = new SlashCommandBuilder()
           .setDescription("Maximum prompt length in characters.")
           .setRequired(false)
           .setMinValue(60)
-          .setMaxValue(240),
+          .setMaxValue(260),
       )
       .addIntegerOption((option) =>
         option
@@ -291,7 +212,7 @@ const configCommand = new SlashCommandBuilder()
   .addSubcommand((subcommand) =>
     subcommand
       .setName("disable_game")
-      .setDescription("Disable one game for this server.")
+      .setDescription("Disable one core game for this server.")
       .addStringOption((option) =>
         addChoices(
           option
@@ -305,7 +226,7 @@ const configCommand = new SlashCommandBuilder()
   .addSubcommand((subcommand) =>
     subcommand
       .setName("enable_game")
-      .setDescription("Enable one game for this server.")
+      .setDescription("Enable one core game for this server.")
       .addStringOption((option) =>
         addChoices(
           option
@@ -349,7 +270,7 @@ const autopostCommand = new SlashCommandBuilder()
             .setName("game")
             .setDescription("Game to post.")
             .setRequired(false),
-          GAME_CHOICES,
+          GAME_CHOICES.filter((choice) => choice.value !== "paranoia"),
         ),
       )
       .addStringOption((option) =>
@@ -398,15 +319,8 @@ function getCommandPayload() {
     truthOrDareCommand.toJSON(),
     truthCommand.toJSON(),
     dareCommand.toJSON(),
-    wouldYouRatherCommand.toJSON(),
-    neverHaveIEverCommand.toJSON(),
+    neverEverCommand.toJSON(),
     paranoiaCommand.toJSON(),
-    icebreakerCommand.toJSON(),
-    challengeCommand.toJSON(),
-    hotTakeCommand.toJSON(),
-    battleCommand.toJSON(),
-    streakCommand.toJSON(),
-    timerCommand.toJSON(),
     categoryCommand.toJSON(),
     configCommand.toJSON(),
     autopostCommand.toJSON(),

@@ -1,4 +1,4 @@
-const { pickRandom, shortId } = require("../utils/random");
+const { pickRandom, pickWeightedRandom, shortId } = require("../utils/random");
 const { normalizeText, sanitizePrompt } = require("../utils/textFilters");
 const {
   CATEGORY_LABELS,
@@ -59,6 +59,32 @@ function scoreSignatureOverlap(signatureA, signatureB) {
   return shared / Math.min(signatureA.size, signatureB.size);
 }
 
+function buildUsageMap(rows) {
+  const usage = new Map();
+
+  for (const row of rows) {
+    usage.set(row.key, {
+      count: Number(row.count) || 0,
+      lastUsedAt: Number(row.lastUsedAt) || 0,
+    });
+  }
+
+  return usage;
+}
+
+function freshnessPenalty(lastUsedAt, ceilingMinutes, maxPenalty) {
+  if (!lastUsedAt) {
+    return 0;
+  }
+
+  const minutesAgo = Math.floor((Date.now() - lastUsedAt) / 60000);
+  if (minutesAgo >= ceilingMinutes) {
+    return 0;
+  }
+
+  return (1 - (minutesAgo / ceilingMinutes)) * maxPenalty;
+}
+
 class PromptEngine {
   constructor({ aiPromptService = null, store, recentHistoryLimit = 120 } = {}) {
     this.aiPromptService = aiPromptService;
@@ -111,16 +137,8 @@ class PromptEngine {
 
   resolveGameKeys(requestedGame, guildConfig) {
     const disabledGames = new Set(guildConfig.disabledGames || []);
-    const internalGames = [
-      "truth",
-      "dare",
-      "would_you_rather",
-      "never_have_i_ever",
-      "paranoia",
-      "icebreaker",
-      "challenge",
-      "hot_take",
-    ].filter((game) => !disabledGames.has(game));
+    const internalGames = ["truth", "dare", "never_have_i_ever", "paranoia"]
+      .filter((game) => !disabledGames.has(game));
 
     if (requestedGame === "random" || !requestedGame) {
       return internalGames;
@@ -166,29 +184,38 @@ class PromptEngine {
     };
   }
 
-  scoreCandidates(candidates, recentEntries, requestedCategory) {
+  scoreCandidates(candidates, recentEntries, requestedCategory, usageStats) {
     const recentSignatures = recentEntries
       .slice(0, 18)
       .map((entry) => buildPromptSignature(entry.text))
       .filter((signature) => signature.size > 0);
     const recentCategories = recentEntries.slice(0, 8).map((entry) => entry.category);
     const recentGames = recentEntries.slice(0, 8).map((entry) => entry.game);
+    const recentTones = recentEntries.slice(0, 8).map((entry) => entry.category);
 
     return candidates
       .map((prompt) => {
         const signature = buildPromptSignature(prompt.text);
+        const channelUsage = usageStats.channel.get(prompt.key) || { count: 0, lastUsedAt: 0 };
+        const guildUsage = usageStats.guild.get(prompt.key) || { count: 0, lastUsedAt: 0 };
         const overlap = recentSignatures.reduce((maxOverlap, recentSignature) => {
           return Math.max(maxOverlap, scoreSignatureOverlap(signature, recentSignature));
         }, 0);
-        const categoryPenalty = requestedCategory === "any" && recentCategories.includes(prompt.category) ? 0.16 : 0;
+        const categoryPenalty = requestedCategory === "any" && recentCategories.includes(prompt.category) ? 0.14 : 0;
         const gamePenalty = recentGames.includes(prompt.game) ? 0.05 : 0;
+        const tonePenalty = requestedCategory === "any" && recentTones.includes(prompt.tone || prompt.category) ? 0.05 : 0;
+        const spicyPenalty = requestedCategory === "any" && prompt.category === "flirty" ? 0.07 : 0;
+        const usagePenalty = (channelUsage.count * 0.09) + (guildUsage.count * 0.03);
+        const freshness = freshnessPenalty(channelUsage.lastUsedAt, 180, 0.22)
+          + freshnessPenalty(guildUsage.lastUsedAt, 90, 0.08);
+        const weightBonus = Math.min(0.3, (prompt.weight || 1) * 0.08);
 
         return {
           prompt,
-          overlap: overlap + categoryPenalty + gamePenalty,
+          score: overlap + categoryPenalty + gamePenalty + tonePenalty + spicyPenalty + usagePenalty + freshness - weightBonus,
         };
       })
-      .sort((left, right) => left.overlap - right.overlap);
+      .sort((left, right) => left.score - right.score);
   }
 
   async getNextPrompt({
@@ -254,6 +281,19 @@ class PromptEngine {
         scope: "guild",
       }),
     );
+    const usageStats = {
+      channel: buildUsageMap(this.store.getPromptUsageStats({
+        guildId,
+        channelId,
+        games: gameKeys,
+        scope: "channel",
+      })),
+      guild: buildUsageMap(this.store.getPromptUsageStats({
+        guildId,
+        games: gameKeys,
+        scope: "guild",
+      })),
+    };
     const recentEntries = [
       ...recentChannelEntries,
       ...recentGuildEntries.filter((entry) => !recentChannelKeys.has(entry.key)),
@@ -304,13 +344,18 @@ class PromptEngine {
               : notRecentGuildCandidates.length > 0
                 ? notRecentGuildCandidates
                 : matching;
-    const scoredCandidates = this.scoreCandidates(candidatePool, recentEntries, category);
-    const preferredCandidates = scoredCandidates.filter((entry) => entry.overlap < 0.48);
+    const scoredCandidates = this.scoreCandidates(candidatePool, recentEntries, category, usageStats);
+    const preferredCandidates = scoredCandidates.filter((entry) => entry.score < 0.62);
     const selectionPool = (preferredCandidates.length > 0 ? preferredCandidates : scoredCandidates)
-      .slice(0, 48)
-      .map((entry) => entry.prompt);
+      .slice(0, 64);
 
-    let selected = pickRandom(selectionPool);
+    const selectedEntry = pickWeightedRandom(selectionPool, (entry) => {
+      const quality = Math.max(0.1, entry.prompt.weight || 1);
+      const freshness = 1 / (1 + Math.max(0, entry.score * 2.5));
+      return quality * freshness;
+    });
+
+    let selected = selectedEntry ? selectedEntry.prompt : null;
     let source = "catalog";
 
     if (!selected && this.aiPromptService && this.aiPromptService.enabled) {
@@ -342,11 +387,15 @@ class PromptEngine {
       const fallbackGame = gameKeys[0];
       selected = {
         game: fallbackGame,
-        category: category === "any" ? "funny" : category,
+        category: category === "any" ? "relatable" : category,
         rating,
         text: fallbackGame === "dare"
           ? "Give a dramatic 20-second speech about your day."
-          : "What is one thing you would improve this week?",
+          : fallbackGame === "never_have_i_ever"
+            ? "Never have I ever sent a message and instantly wished I could take it back."
+            : fallbackGame === "paranoia"
+              ? "Who here would panic first if plans changed at the last second?"
+              : "What is one thing you would improve this week?",
         key: normalizeText(`${fallbackGame}|${category}|${rating}|fallback`),
       };
       source = "fallback";
