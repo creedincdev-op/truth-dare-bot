@@ -34,7 +34,7 @@ SETTINGS_FILE = DATA_DIR / "bot_settings.json"
 AI_CACHE_FILE = DATA_DIR / "ai_prompt_cache.json"
 
 RATINGS = ["PG", "PG13", "R"]
-MADE_WITH_TAG = "Made with \u2615\ufe0f and \U0001f9e0 By Yuvraj"
+MADE_WITH_TAG = "Made with \u2615 and \U0001f9e0 By Yuvraj"
 GAME_LABELS = {
     "truth_or_dare": "Truth or Dare",
     "truth": "Truth",
@@ -987,6 +987,7 @@ def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = Fal
     reveal_line = "Your answer was sent anonymously." if answered else "Your name stays out of the public reveal."
     return "\n\n".join(
         [
+            f"**🔗 From**\n[{escape_md(round_data.guild_name)} • # {escape_md(round_data.channel_name)}]({build_paranoia_jump_url(round_data)})",
             f"**👤 Sent by**\n{escape_md(round_data.requester_name)}",
             f"**🎭 Reveal style**\n{reveal_line}",
         ]
@@ -1211,7 +1212,7 @@ class PromptCardView(discord.ui.LayoutView):
                 body=build_prompt_details_text(prompt, requester_name),
                 accent_color=GAME_COLORS.get(prompt.game, 0x5865F2),
                 footer=build_prompt_footer_text(prompt),
-                accessory_url=requester_avatar_url,
+                accessory_url=None,
                 actions=actions,
             )
         )
@@ -1728,18 +1729,11 @@ async def paranoia_command(
     )
     paranoia_rounds[round_id] = round_data
 
-    link_message = None
     try:
-        link_message = await target.send(build_paranoia_jump_url(round_data))
         dm_message = await target.send(
             view=ParanoiaAnswerView(bot, round_id),
         )
     except discord.HTTPException:
-        if link_message is not None:
-            try:
-                await link_message.delete()
-            except Exception:
-                pass
         paranoia_rounds.pop(round_id, None)
         await interaction.followup.send(embed=build_paranoia_failure_embed(), ephemeral=True)
         return
