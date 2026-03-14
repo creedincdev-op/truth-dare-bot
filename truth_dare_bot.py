@@ -146,6 +146,7 @@ class ParanoiaRound:
     channel_name: str
     requester_id: int
     requester_name: str
+    requester_avatar_url: str | None
     target_user_id: int
     prompt: PromptResult
     status: str = "awaiting_answer"
@@ -963,76 +964,119 @@ def build_prompt_embed(prompt: PromptResult, requester_user: discord.abc.User | 
     return embed
 
 
-def build_paranoia_dm_embed(round_data: ParanoiaRound) -> discord.Embed:
-    embed = discord.Embed(
-        title="🫣 Secret Paranoia Round",
-        description=(
-            f"**Question**\n"
-            f"> {round_data.prompt.text}\n\n"
-            f"Your reply goes back anonymously. Keep it funny, clean, and server-safe."
+def escape_md(value: str | None) -> str:
+    return discord.utils.escape_markdown(str(value or ""), as_needed=True)
+
+
+def build_paranoia_jump_url(round_data: ParanoiaRound) -> str:
+    return f"https://discord.com/channels/{round_data.guild_id}/{round_data.channel_id}"
+
+
+def build_paranoia_footer_text(round_data: ParanoiaRound, *, include_type: bool = True) -> str:
+    parts: list[str] = []
+    if include_type:
+        parts.append("PARANOIA")
+    parts.append(f"Rating {round_data.prompt.rating}")
+    parts.append(f"ID {round_data.prompt.id}")
+    parts.append("\u2615\ufe0f\u2764\ufe0f by yuvraj")
+    return f"-# {' \u2022 '.join(parts)}"
+
+
+def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = False) -> str:
+    reveal_line = "Your answer was sent anonymously." if answered else "Your name stays out of the public reveal."
+    return "\n\n".join(
+        [
+            f"**\U0001f464 Sent by**\n{escape_md(round_data.requester_name)}",
+            f"**\U0001f517 Back to chat**\n[Open original channel]({build_paranoia_jump_url(round_data)})",
+            f"**\U0001fae5 Reveal style**\n{reveal_line}",
+        ]
+    )
+
+
+def build_paranoia_card_container(
+    *,
+    eyebrow: str,
+    headline: str,
+    body: str,
+    accent_color: int,
+    footer: str,
+    accessory_url: str | None = None,
+    button: discord.ui.Button[Any] | None = None,
+) -> discord.ui.Container:
+    container = discord.ui.Container(accent_color=accent_color)
+    container.add_item(discord.ui.TextDisplay(f"-# {eyebrow}"))
+    container.add_item(discord.ui.TextDisplay(f"## {headline}"))
+
+    if accessory_url:
+        container.add_item(discord.ui.Section(body, accessory=discord.ui.Thumbnail(accessory_url)))
+    else:
+        container.add_item(discord.ui.TextDisplay(body))
+
+    if button is not None:
+        row = discord.ui.ActionRow()
+        row.add_item(button)
+        container.add_item(row)
+
+    container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.large))
+    container.add_item(discord.ui.TextDisplay(footer))
+    return container
+
+
+def build_paranoia_card_view(
+    *,
+    eyebrow: str,
+    headline: str,
+    body: str,
+    accent_color: int,
+    footer: str,
+    accessory_url: str | None = None,
+    button: discord.ui.Button[Any] | None = None,
+    timeout: float | None = None,
+) -> discord.ui.LayoutView:
+    view = discord.ui.LayoutView(timeout=timeout)
+    container = build_paranoia_card_container(
+        eyebrow=eyebrow,
+        headline=headline,
+        body=body,
+        accent_color=accent_color,
+        footer=footer,
+        accessory_url=accessory_url,
+        button=button,
+    )
+    view.add_item(container)
+    return view
+
+
+def build_paranoia_launch_view(round_data: ParanoiaRound, *, answered: bool = False) -> discord.ui.LayoutView:
+    if answered:
+        return build_paranoia_card_view(
+            eyebrow="Truth OR Dare \u2022 Paranoia",
+            headline="\u2705 Anonymous answer received",
+            body="The reveal just landed below.",
+            accent_color=0x57F287,
+            footer="-# Anonymous mode stayed clean \u2022 \u2615\ufe0f\u2764\ufe0f by yuvraj",
+        )
+
+    return build_paranoia_card_view(
+        eyebrow="Truth OR Dare \u2022 Paranoia",
+        headline="\U0001fae5 Secret question delivered",
+        body=(
+            "Someone got a private Paranoia question.\n\n"
+            "The anonymous answer will appear here once they reply."
         ),
-        color=GAME_COLORS["paranoia"],
+        accent_color=GAME_COLORS["paranoia"],
+        footer="-# No requester or answerer is shown here \u2022 \u2615\ufe0f\u2764\ufe0f by yuvraj",
     )
-    embed.set_author(name="Truth OR Dare • Paranoia")
-    embed.add_field(
-        name="👤 Sent by",
-        value=f"**{round_data.requester_name}**",
-        inline=True,
-    )
-    embed.add_field(
-        name="📍 From",
-        value=f"**{round_data.guild_name}**\n`#{round_data.channel_name}`",
-        inline=True,
-    )
-    embed.add_field(
-        name="💬 Answer style",
-        value="Your name stays out of the public reveal.",
-        inline=False,
-    )
-    embed.set_footer(text=f"Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id} • ☕❤ by yuvraj")
-    return embed
 
 
-def build_paranoia_reveal_embed(round_data: ParanoiaRound) -> discord.Embed:
-    embed = discord.Embed(
-        title="🎭 Anonymous Paranoia Reveal",
-        description=f"> {round_data.prompt.text}",
-        color=GAME_COLORS["paranoia"],
+def build_paranoia_reveal_view(round_data: ParanoiaRound) -> discord.ui.LayoutView:
+    return build_paranoia_card_view(
+        eyebrow="Truth OR Dare \u2022 Paranoia",
+        headline=escape_md(round_data.prompt.text),
+        body=f"**\U0001f4ac Anonymous answer**\n{escape_md(round_data.answer_text or 'No answer provided.')}",
+        accent_color=GAME_COLORS["paranoia"],
+        footer=build_paranoia_footer_text(round_data),
     )
-    embed.set_author(name="Truth OR Dare • Paranoia")
-    embed.add_field(
-        name="💬 Anonymous answer",
-        value=round_data.answer_text or "No answer provided.",
-        inline=False,
-    )
-    embed.add_field(
-        name="📍 Origin",
-        value=f"`#{round_data.channel_name}` in **{round_data.guild_name}**",
-        inline=False,
-    )
-    embed.set_footer(text=f"Type: PARANOIA | Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id} • ☕❤ by yuvraj")
-    return embed
-
-
-def build_paranoia_launch_embed(round_data: ParanoiaRound) -> discord.Embed:
-    embed = discord.Embed(
-        title="🫥 Anonymous Paranoia Started",
-        description="The target got a private question. Their anonymous answer will land here when they reply.",
-        color=GAME_COLORS["paranoia"],
-    )
-    embed.set_author(name="Truth OR Dare • Paranoia")
-    embed.add_field(
-        name="📍 Round",
-        value=f"`#{round_data.channel_name}` in **{round_data.guild_name}**",
-        inline=True,
-    )
-    embed.add_field(
-        name="🫥 Mode",
-        value="Question in DM. Answer comes back anonymously.",
-        inline=True,
-    )
-    embed.set_footer(text="No requester or answerer is shown here • ☕❤ by yuvraj")
-    return embed
 
 
 def build_paranoia_failure_embed() -> discord.Embed:
@@ -1213,19 +1257,12 @@ class ParanoiaAnswerModal(discord.ui.Modal, title="Anonymous Answer"):
             await interaction.response.send_message("I got your answer, but I could not post it back in the original channel.")
             return
 
-        await channel.send(embed=build_paranoia_reveal_embed(round_data))
+        await channel.send(view=build_paranoia_reveal_view(round_data))
 
         if round_data.ack_message_id:
             try:
                 ack_message = await channel.fetch_message(round_data.ack_message_id)
-                await ack_message.edit(
-                    embed=discord.Embed(
-                        title="✅ Anonymous answer received",
-                        description="The reveal just dropped below.",
-                        color=0x57F287,
-                    ),
-                    content=None,
-                )
+                await ack_message.edit(view=build_paranoia_launch_view(round_data, answered=True))
             except discord.HTTPException:
                 pass
 
@@ -1233,7 +1270,7 @@ class ParanoiaAnswerModal(discord.ui.Modal, title="Anonymous Answer"):
         if isinstance(dm_channel, discord.DMChannel) and round_data.dm_message_id:
             try:
                 dm_message = await dm_channel.fetch_message(round_data.dm_message_id)
-                await dm_message.edit(view=None)
+                await dm_message.edit(view=ParanoiaAnswerView(self.bot_instance, self.round_id, answered=True))
             except discord.HTTPException:
                 pass
 
@@ -1241,14 +1278,45 @@ class ParanoiaAnswerModal(discord.ui.Modal, title="Anonymous Answer"):
         await interaction.response.send_message("Answer sent anonymously.")
 
 
-class ParanoiaAnswerView(discord.ui.View):
-    def __init__(self, bot_instance: "TruthDareBot", round_id: str) -> None:
-        super().__init__(timeout=1800)
+class ParanoiaAnswerView(discord.ui.LayoutView):
+    def __init__(self, bot_instance: "TruthDareBot", round_id: str, *, answered: bool = False) -> None:
+        super().__init__(timeout=None if answered else 1800)
         self.bot_instance = bot_instance
         self.round_id = round_id
-        button = discord.ui.Button(label="Answer", emoji="💬", style=discord.ButtonStyle.primary)
-        button.callback = self.answer_callback
-        self.add_item(button)
+
+        round_data = paranoia_rounds.get(round_id)
+        if round_data is None:
+            return
+
+        button = discord.ui.Button(
+            label="Answered" if answered else "Answer",
+            emoji="✅" if answered else "💬",
+            style=discord.ButtonStyle.success if answered else discord.ButtonStyle.primary,
+            disabled=answered,
+        )
+        if not answered:
+            button.callback = self.answer_callback
+
+        body = "\n\n".join(
+            [
+                "-# 🫣 Secret Paranoia Drop",
+                build_paranoia_dm_details(round_data, answered=answered),
+                "-# Reply once. Keep it funny, clean, and server-safe."
+                if not answered
+                else "-# Locked in. The public reveal already has your anonymous answer.",
+            ]
+        )
+        self.add_item(
+            build_paranoia_card_container(
+                eyebrow="Truth OR Dare • Paranoia",
+                headline=escape_md(round_data.prompt.text),
+                body=body,
+                accent_color=0x57F287 if answered else GAME_COLORS["paranoia"],
+                footer=build_paranoia_footer_text(round_data, include_type=False),
+                accessory_url=round_data.requester_avatar_url,
+                button=button,
+            )
+        )
 
     async def answer_callback(self, interaction: discord.Interaction) -> None:
         round_data = paranoia_rounds.get(self.round_id)
@@ -1576,16 +1644,14 @@ async def paranoia_command(
         channel_name=getattr(interaction.channel, "name", "unknown-channel"),
         requester_id=interaction.user.id,
         requester_name=getattr(interaction.user, "global_name", None) or interaction.user.name,
+        requester_avatar_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None,
         target_user_id=target.id,
         prompt=prompt,
     )
     paranoia_rounds[round_id] = round_data
 
     try:
-        jump_url = f"https://discord.com/channels/{round_data.guild_id}/{round_data.channel_id}"
         dm_message = await target.send(
-            content=jump_url,
-            embed=build_paranoia_dm_embed(round_data),
             view=ParanoiaAnswerView(bot, round_id),
         )
     except discord.HTTPException:
@@ -1597,7 +1663,7 @@ async def paranoia_command(
     round_data.dm_message_id = dm_message.id
     public_channel = interaction.channel
     if public_channel is not None and isinstance(public_channel, (discord.TextChannel, discord.Thread)):
-        ack_message = await public_channel.send(embed=build_paranoia_launch_embed(round_data))
+        ack_message = await public_channel.send(view=build_paranoia_launch_view(round_data))
         round_data.ack_message_id = ack_message.id
 
     await interaction.followup.send(
