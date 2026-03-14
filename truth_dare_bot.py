@@ -59,7 +59,7 @@ GAME_LABELS = {
 }
 GAME_COLORS = {
     "truth": 0x25C76A,
-    "dare": 0xFF5A66,
+    "dare": 0xDC2626,
     "never_have_i_ever": 0x5A70FF,
     "paranoia": 0xE7A63F,
 }
