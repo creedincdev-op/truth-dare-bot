@@ -1728,12 +1728,18 @@ async def paranoia_command(
     )
     paranoia_rounds[round_id] = round_data
 
+    link_message = None
     try:
+        link_message = await target.send(build_paranoia_jump_url(round_data))
         dm_message = await target.send(
-            content=build_paranoia_jump_url(round_data),
             view=ParanoiaAnswerView(bot, round_id),
         )
     except discord.HTTPException:
+        if link_message is not None:
+            try:
+                await link_message.delete()
+            except Exception:
+                pass
         paranoia_rounds.pop(round_id, None)
         await interaction.followup.send(embed=build_paranoia_failure_embed(), ephemeral=True)
         return
