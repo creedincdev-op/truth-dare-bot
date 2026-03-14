@@ -1102,6 +1102,7 @@ def build_paranoia_reveal_view(round_data: ParanoiaRound) -> discord.ui.LayoutVi
         body=f"**\U0001f4ac Anonymous answer**\n{escape_md(round_data.answer_text or 'No answer provided.')}",
         accent_color=GAME_COLORS["paranoia"],
         footer=build_paranoia_footer_text(round_data),
+        headline_prefix="###",
     )
 
 
@@ -1225,7 +1226,7 @@ class PromptCardView(discord.ui.LayoutView):
         container.add_item(
             discord.ui.TextDisplay(f"-# **Truth OR Dare • {GAME_LABELS.get(prompt.game, prompt.game)}**")
         )
-        container.add_item(discord.ui.TextDisplay(f"**{escape_md(prompt.text)}**"))
+        container.add_item(discord.ui.TextDisplay(f"### {escape_md(prompt.text)}"))
         requested_text = build_prompt_requested_text(requester_name, requester_id)
         if requested_text:
             container.add_item(discord.ui.TextDisplay(requested_text))
