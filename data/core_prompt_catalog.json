@@ -42677,6 +42677,1014 @@
       "tone": "flirty",
       "weight": 0.78,
       "key": "paranoia flirty r who here would have the strongest game until it actually mattered"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would start a fake investigation over something tiny and actually get the whole chat invested?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would start a fake investigation over something tiny and actually get the whole chat invested"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would say \"I am fine\" in the exact tone that proves they are absolutely not fine?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would say i am fine in the exact tone that proves they are absolutely not fine"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would accidentally expose their entire mood with one meme reply?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would accidentally expose their entire mood with one meme reply"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would turn one harmless coincidence into a full conspiracy thread?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would turn one harmless coincidence into a full conspiracy thread"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would get caught smiling at their phone and deny everything badly?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would get caught smiling at their phone and deny everything badly"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would panic first if they had to show the last five photos they took?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would panic first if they had to show the last five photos they took"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would pretend they know the plan and then freestyle the whole thing?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would pretend they know the plan and then freestyle the whole thing"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would make a normal story sound like a season finale recap?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would make a normal story sound like a season finale recap"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would open the member list for reasons they cannot explain?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would open the member list for reasons they cannot explain"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would start fixing their hair the second someone says camera on?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would start fixing their hair the second someone says camera on"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would notice a vibe shift before anyone else and then act like it was obvious?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would notice a vibe shift before anyone else and then act like it was obvious"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would type a whole paragraph, delete it, and send \"lol\" instead?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would type a whole paragraph delete it and send lol instead"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would watch the chat quietly for ten minutes and still know all the drama?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would watch the chat quietly for ten minutes and still know all the drama"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would be the most suspicious person in a room full of innocent people?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would be the most suspicious person in a room full of innocent people"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would turn a tiny inconvenience into a motivational speech?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would turn a tiny inconvenience into a motivational speech"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would have the funniest fake calm voice during absolute chaos?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would have the funniest fake calm voice during absolute chaos"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would get exposed by one accidental screen share?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would get exposed by one accidental screen share"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would overthink one two-word reply for the rest of the night?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would overthink one two word reply for the rest of the night"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would look the most innocent while clearly hiding the funniest secret?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would look the most innocent while clearly hiding the funniest secret"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Who here would be the first person to say \"this is getting out of hand\" after making it worse?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|who here would be the first person to say this is getting out of hand after making it worse"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "PG",
+      "text": "Who here would act like they would never fold and then fold instantly under pressure?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|PG|who here would act like they would never fold and then fold instantly under pressure"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "PG",
+      "text": "Who here would try to look mysterious and end up looking extra obvious?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|PG|who here would try to look mysterious and end up looking extra obvious"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "PG",
+      "text": "Who here would have the strongest side-eye in the server?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|PG|who here would have the strongest side eye in the server"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "PG",
+      "text": "Who here would drop the most dangerous one-liner and go silent after?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|PG|who here would drop the most dangerous one liner and go silent after"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "PG",
+      "text": "Who here would start a roast so clean that nobody could even be mad?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|PG|who here would start a roast so clean that nobody could even be mad"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "PG",
+      "text": "Who here would get too confident for exactly thirty seconds and then regret it?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|PG|who here would get too confident for exactly thirty seconds and then regret it"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "PG",
+      "text": "Who here would have the most dramatic unread-message energy here?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|PG|who here would have the most dramatic unread message energy here"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "PG",
+      "text": "Who here would make the weirdest safe purchase sound completely justified?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|PG|who here would make the weirdest safe purchase sound completely justified"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "PG",
+      "text": "Who here would say the boldest thing in the calmest voice?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|PG|who here would say the boldest thing in the calmest voice"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "PG",
+      "text": "Who here would be the hardest to read until one tiny detail gives them away?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|PG|who here would be the hardest to read until one tiny detail gives them away"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would act the coolest after one nice reply and then replay it in their head later?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would act the coolest after one nice reply and then replay it in their head later"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would check who viewed something way sooner than they should admit?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would check who viewed something way sooner than they should admit"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would pretend a certain person does not affect their mood while being deeply affected?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would pretend a certain person does not affect their mood while being deeply affected"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would look the calmest while secretly caring the most about one reaction?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would look the calmest while secretly caring the most about one reaction"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would post something just subtle enough for one person to notice?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would post something just subtle enough for one person to notice"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would act like they are joking while testing the waters for real?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would act like they are joking while testing the waters for real"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would have the smoothest backup line ready and still overthink using it?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would have the smoothest backup line ready and still overthink using it"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would get caught trying not to look interested?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would get caught trying not to look interested"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would turn one decent conversation into a three-day internal storyline?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would turn one decent conversation into a three day internal storyline"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would sound the most confident in text and the most flustered in real life?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would sound the most confident in text and the most flustered in real life"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would absolutely know when they are being flirted with and still pretend they do not?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would absolutely know when they are being flirted with and still pretend they do not"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would act allergic to attention while secretly loving the right kind of attention?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would act allergic to attention while secretly loving the right kind of attention"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would notice a tiny change in energy from one specific person immediately?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would notice a tiny change in energy from one specific person immediately"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here would give the best advice and follow none of it themselves?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here would give the best advice and follow none of it themselves"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Who here would have the cleanest game until it is time to actually say something bold?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|who here would have the cleanest game until it is time to actually say something bold"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Who here would catch feelings first and then blame it on the vibe?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|who here would catch feelings first and then blame it on the vibe"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Who here would get bonus points from one dangerous voice note?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|who here would get bonus points from one dangerous voice note"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Who here would pretend they are immune to charm and then lose instantly?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|who here would pretend they are immune to charm and then lose instantly"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Who here would look the least obvious while being the easiest to read for the right person?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|who here would look the least obvious while being the easiest to read for the right person"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Who here would remember one compliment for way longer than they should?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|who here would remember one compliment for way longer than they should"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Who here would act unbothered after being noticed and then overanalyze it later?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|who here would act unbothered after being noticed and then overanalyze it later"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Who here would have the highest chance of smiling at their phone and locking it immediately?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|who here would have the highest chance of smiling at their phone and locking it immediately"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Who here would win a staring contest by accident and think about it all night?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|who here would win a staring contest by accident and think about it all night"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Who here would be one good playlist away from making questionable decisions?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|who here would be one good playlist away from making questionable decisions"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would act completely unbothered after getting ignored and then spiral later in silence?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would act completely unbothered after getting ignored and then spiral later in silence"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would start the most dangerous harmless tension in one sentence?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would start the most dangerous harmless tension in one sentence"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would deliver a line so smooth that the room would need a minute after?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would deliver a line so smooth that the room would need a minute after"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would look the most innocent while being the biggest late-night risk here?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would look the most innocent while being the biggest late night risk here"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would have the highest chance of sending a bold message and regretting the confidence later?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would have the highest chance of sending a bold message and regretting the confidence later"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would say \"it is not that serious\" while clearly making it very serious in their head?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would say it is not that serious while clearly making it very serious in their head"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would be the first to catch a vibe and the last to admit it?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would be the first to catch a vibe and the last to admit it"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would have the strongest \"I should not say this but\" energy in the room?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would have the strongest i should not say this but energy in the room"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would make eye contact at the wrong moment and lose all ability to act normal?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would make eye contact at the wrong moment and lose all ability to act normal"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would cause the most harmless tension by doing almost nothing?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would cause the most harmless tension by doing almost nothing"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would be the most likely to look composed while their thoughts are a complete mess?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would be the most likely to look composed while their thoughts are a complete mess"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here would have the cleanest poker face until one certain topic appears?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here would have the cleanest poker face until one certain topic appears"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Who here would have the highest chance of turning one compliment into a full personality event?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|who here would have the highest chance of turning one compliment into a full personality event"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Who here would act like they were not waiting for that reply while definitely waiting for that reply?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|who here would act like they were not waiting for that reply while definitely waiting for that reply"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Who here would be two messages away from a very bold decision?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|who here would be two messages away from a very bold decision"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Who here would say something playful that sounds harmless and still changes the whole vibe?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|who here would say something playful that sounds harmless and still changes the whole vibe"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Who here would have the strongest chance of accidentally being too smooth for their own plan?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|who here would have the strongest chance of accidentally being too smooth for their own plan"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Who here would get the most dramatic confidence boost from one tiny sign of interest?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|who here would get the most dramatic confidence boost from one tiny sign of interest"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Who here would look the most stable while being one risky joke away from chaos?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|who here would look the most stable while being one risky joke away from chaos"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Who here would have the kind of energy that makes people ask follow-up questions they did not plan to ask?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|who here would have the kind of energy that makes people ask follow up questions they did not plan to ask"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Whose name comes to mind first for someone who would start a fake investigation over something tiny and actually get the whole chat invested?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|whose name comes to mind first for someone who would start a fake investigation over something tiny and actually get the whole chat invested"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Whose name comes to mind first for someone who would say \"I am fine\" in the exact tone that proves they are absolutely not fine?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|whose name comes to mind first for someone who would say i am fine in the exact tone that proves they are absolutely not fine"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Whose name comes to mind first for someone who would accidentally expose their entire mood with one meme reply?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|whose name comes to mind first for someone who would accidentally expose their entire mood with one meme reply"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Whose name comes to mind first for someone who would turn one harmless coincidence into a full conspiracy thread?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|whose name comes to mind first for someone who would turn one harmless coincidence into a full conspiracy thread"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Whose name comes to mind first for someone who would get caught smiling at their phone and deny everything badly?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|whose name comes to mind first for someone who would get caught smiling at their phone and deny everything badly"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Whose name comes to mind first for someone who would panic first if they had to show the last five photos they took?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|whose name comes to mind first for someone who would panic first if they had to show the last five photos they took"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Whose name comes to mind first for someone who would pretend they know the plan and then freestyle the whole thing?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|whose name comes to mind first for someone who would pretend they know the plan and then freestyle the whole thing"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Whose name comes to mind first for someone who would make a normal story sound like a season finale recap?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|whose name comes to mind first for someone who would make a normal story sound like a season finale recap"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Whose name comes to mind first for someone who would open the member list for reasons they cannot explain?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|whose name comes to mind first for someone who would open the member list for reasons they cannot explain"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG",
+      "text": "Whose name comes to mind first for someone who would start fixing their hair the second someone says camera on?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG|whose name comes to mind first for someone who would start fixing their hair the second someone says camera on"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here low-key looks like they would act the coolest after one nice reply and then replay it in their head later?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here low key looks like they would act the coolest after one nice reply and then replay it in their head later"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here low-key looks like they would fold the fastest after one properly timed compliment?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here low key looks like they would fold the fastest after one properly timed compliment"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here low-key looks like they would check who viewed something way sooner than they should admit?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here low key looks like they would check who viewed something way sooner than they should admit"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here low-key looks like they would pretend a certain person does not affect their mood while being deeply affected?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here low key looks like they would pretend a certain person does not affect their mood while being deeply affected"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here low-key looks like they would look the calmest while secretly caring the most about one reaction?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here low key looks like they would look the calmest while secretly caring the most about one reaction"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here low-key looks like they would post something just subtle enough for one person to notice?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here low key looks like they would post something just subtle enough for one person to notice"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here low-key looks like they would act like they are joking while testing the waters for real?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here low key looks like they would act like they are joking while testing the waters for real"
+    },
+    {
+      "game": "paranoia",
+      "category": "social",
+      "rating": "PG13",
+      "text": "Who here low-key looks like they would have the smoothest backup line ready and still overthink using it?",
+      "tone": "social",
+      "weight": 1.04,
+      "key": "paranoia|social|PG13|who here low key looks like they would have the smoothest backup line ready and still overthink using it"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Whose name comes to mind first for someone who would have the cleanest game until it is time to actually say something bold?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|whose name comes to mind first for someone who would have the cleanest game until it is time to actually say something bold"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Whose name comes to mind first for someone who would catch feelings first and then blame it on the vibe?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|whose name comes to mind first for someone who would catch feelings first and then blame it on the vibe"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Whose name comes to mind first for someone who would get bonus points from one dangerous voice note?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|whose name comes to mind first for someone who would get bonus points from one dangerous voice note"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Whose name comes to mind first for someone who would pretend they are immune to charm and then lose instantly?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|whose name comes to mind first for someone who would pretend they are immune to charm and then lose instantly"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Whose name comes to mind first for someone who would look the least obvious while being the easiest to read for the right person?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|whose name comes to mind first for someone who would look the least obvious while being the easiest to read for the right person"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "PG13",
+      "text": "Whose name comes to mind first for someone who would remember one compliment for way longer than they should?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|PG13|whose name comes to mind first for someone who would remember one compliment for way longer than they should"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here low-key looks like they would act completely unbothered after getting ignored and then spiral later in silence?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here low key looks like they would act completely unbothered after getting ignored and then spiral later in silence"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here low-key looks like they would start the most dangerous harmless tension in one sentence?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here low key looks like they would start the most dangerous harmless tension in one sentence"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here low-key looks like they would deliver a line so smooth that the room would need a minute after?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here low key looks like they would deliver a line so smooth that the room would need a minute after"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here low-key looks like they would look the most innocent while being the biggest late-night risk here?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here low key looks like they would look the most innocent while being the biggest late night risk here"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here low-key looks like they would have the highest chance of sending a bold message and regretting the confidence later?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here low key looks like they would have the highest chance of sending a bold message and regretting the confidence later"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here low-key looks like they would say \"it is not that serious\" while clearly making it very serious in their head?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here low key looks like they would say it is not that serious while clearly making it very serious in their head"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here low-key looks like they would be the first to catch a vibe and the last to admit it?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here low key looks like they would be the first to catch a vibe and the last to admit it"
+    },
+    {
+      "game": "paranoia",
+      "category": "bold",
+      "rating": "R",
+      "text": "Who here low-key looks like they would have the strongest \"I should not say this but\" energy in the room?",
+      "tone": "bold",
+      "weight": 1.04,
+      "key": "paranoia|bold|R|who here low key looks like they would have the strongest i should not say this but energy in the room"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Whose name comes to mind first for someone who would have the highest chance of turning one compliment into a full personality event?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|whose name comes to mind first for someone who would have the highest chance of turning one compliment into a full personality event"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Whose name comes to mind first for someone who would act like they were not waiting for that reply while definitely waiting for that reply?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|whose name comes to mind first for someone who would act like they were not waiting for that reply while definitely waiting for that reply"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Whose name comes to mind first for someone who would be two messages away from a very bold decision?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|whose name comes to mind first for someone who would be two messages away from a very bold decision"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Whose name comes to mind first for someone who would say something playful that sounds harmless and still changes the whole vibe?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|whose name comes to mind first for someone who would say something playful that sounds harmless and still changes the whole vibe"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Whose name comes to mind first for someone who would have the strongest chance of accidentally being too smooth for their own plan?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|whose name comes to mind first for someone who would have the strongest chance of accidentally being too smooth for their own plan"
+    },
+    {
+      "game": "paranoia",
+      "category": "flirty",
+      "rating": "R",
+      "text": "Whose name comes to mind first for someone who would get the most dramatic confidence boost from one tiny sign of interest?",
+      "tone": "flirty",
+      "weight": 1.04,
+      "key": "paranoia|flirty|R|whose name comes to mind first for someone who would get the most dramatic confidence boost from one tiny sign of interest"
     }
   ]
 }

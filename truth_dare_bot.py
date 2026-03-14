@@ -96,9 +96,10 @@ class ChannelState:
 class ParanoiaRound:
     round_id: str
     guild_id: int
+    guild_name: str
     channel_id: int
+    channel_name: str
     requester_id: int
-    requester_name: str
     target_user_id: int
     prompt: PromptResult
     status: str = "awaiting_answer"
@@ -392,22 +393,80 @@ def build_prompt_embed(prompt: PromptResult, requester_user: discord.abc.User | 
 
 def build_paranoia_dm_embed(round_data: ParanoiaRound) -> discord.Embed:
     embed = discord.Embed(
-        title=round_data.prompt.text,
-        description="**Paranoia**\nReply honestly. Your answer will be revealed back in the server without naming you.",
+        title="🫣 You got a secret Paranoia drop",
+        description=(
+            f"**Question**\n"
+            f"> {round_data.prompt.text}\n\n"
+            f"Your reply goes back anonymously. Keep it funny, clean, and controversy-free."
+        ),
         color=GAME_COLORS["paranoia"],
     )
-    embed.set_author(name=f"Private round from {round_data.requester_name}")
-    embed.set_footer(text=f"Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id}")
+    embed.add_field(
+        name="📍 From",
+        value=f"**{round_data.guild_name}**\n`#{round_data.channel_name}`",
+        inline=True,
+    )
+    embed.add_field(
+        name="🎭 Reveal style",
+        value="Your name stays out of the public answer card.",
+        inline=True,
+    )
+    embed.add_field(
+        name="🧠 Tip",
+        value="Give the first answer that would make the chat spiral.",
+        inline=False,
+    )
+    embed.set_footer(text=f"🎯 Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id}")
     return embed
 
 
 def build_paranoia_reveal_embed(round_data: ParanoiaRound) -> discord.Embed:
     embed = discord.Embed(
-        title="Paranoia Answer",
-        description=f"**Question**\n{round_data.prompt.text}\n\n**Anonymous answer**\n{round_data.answer_text or ''}",
+        title="🎭 Anonymous Paranoia Reveal",
+        description=f"> {round_data.prompt.text}",
         color=GAME_COLORS["paranoia"],
     )
-    embed.set_footer(text=f"Type: PARANOIA | Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id}")
+    embed.add_field(
+        name="💬 Anonymous answer",
+        value=round_data.answer_text or "No answer provided.",
+        inline=False,
+    )
+    embed.add_field(
+        name="🔥 Vibe",
+        value="Nobody gets named. Everyone still starts guessing.",
+        inline=False,
+    )
+    embed.set_footer(text=f"🎯 Type: PARANOIA | Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id}")
+    return embed
+
+
+def build_paranoia_launch_embed(round_data: ParanoiaRound) -> discord.Embed:
+    embed = discord.Embed(
+        title="🫢 Paranoia question sent",
+        description="The target got a private question. Their anonymous answer will land here when they reply.",
+        color=GAME_COLORS["paranoia"],
+    )
+    embed.add_field(
+        name="📍 Round",
+        value=f"`#{round_data.channel_name}` in **{round_data.guild_name}**",
+        inline=True,
+    )
+    embed.add_field(
+        name="👀 Mode",
+        value="Question in DM. Answer comes back anonymously.",
+        inline=True,
+    )
+    embed.set_footer(text="🫥 The bot message does not expose who requested or answered.")
+    return embed
+
+
+def build_paranoia_failure_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="📭 Paranoia could not be delivered",
+        description="I could not DM that user. Ask them to open DMs and try again.",
+        color=0xED4245,
+    )
+    embed.set_footer(text="No round was started.")
     return embed
 
 
@@ -451,13 +510,13 @@ class PromptButtonsView(discord.ui.View):
         return button
 
 
-class ParanoiaAnswerModal(discord.ui.Modal, title="Paranoia Answer"):
+class ParanoiaAnswerModal(discord.ui.Modal, title="🎭 Anonymous Answer"):
     answer = discord.ui.TextInput(
         label="Your answer",
         style=discord.TextStyle.paragraph,
         max_length=220,
         min_length=2,
-        placeholder="Type your answer. It will be revealed anonymously.",
+        placeholder="Drop the answer that will make the chat overthink.",
     )
 
     def __init__(self, bot_instance: "TruthDareBot", round_id: str) -> None:
@@ -497,7 +556,14 @@ class ParanoiaAnswerModal(discord.ui.Modal, title="Paranoia Answer"):
         if round_data.ack_message_id:
             try:
                 ack_message = await channel.fetch_message(round_data.ack_message_id)
-                await ack_message.edit(content="Paranoia answer received. Anonymous reveal dropped below.")
+                await ack_message.edit(
+                    embed=discord.Embed(
+                        title="✅ Anonymous answer received",
+                        description="The reveal just dropped below.",
+                        color=0x57F287,
+                    ),
+                    content=None,
+                )
             except discord.HTTPException:
                 pass
 
@@ -510,7 +576,7 @@ class ParanoiaAnswerModal(discord.ui.Modal, title="Paranoia Answer"):
                 pass
 
         round_data.status = "answered"
-        await interaction.response.send_message("Answer sent anonymously.")
+        await interaction.response.send_message("🎭 Answer sent anonymously.")
 
 
 class ParanoiaAnswerView(discord.ui.View):
@@ -518,7 +584,7 @@ class ParanoiaAnswerView(discord.ui.View):
         super().__init__(timeout=1800)
         self.bot_instance = bot_instance
         self.round_id = round_id
-        button = discord.ui.Button(label="Answer", style=discord.ButtonStyle.primary)
+        button = discord.ui.Button(label="Answer secretly", emoji="🎭", style=discord.ButtonStyle.primary)
         button.callback = self.answer_callback
         self.add_item(button)
 
@@ -701,7 +767,7 @@ async def paranoia_command(
         await interaction.response.send_message("Pick someone else for paranoia. You cannot target yourself.", ephemeral=True)
         return
 
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     prompt = await bot.prompt_engine.get_next_prompt(
         requested_game="paranoia",
         channel_id=interaction.channel_id or 0,
@@ -712,9 +778,10 @@ async def paranoia_command(
     round_data = ParanoiaRound(
         round_id=round_id,
         guild_id=interaction.guild_id,
+        guild_name=interaction.guild.name if interaction.guild else "Unknown Server",
         channel_id=interaction.channel_id or 0,
+        channel_name=getattr(interaction.channel, "name", "unknown-channel"),
         requester_id=interaction.user.id,
-        requester_name=getattr(interaction.user, "global_name", None) or interaction.user.name,
         target_user_id=target.id,
         prompt=prompt,
     )
@@ -727,15 +794,20 @@ async def paranoia_command(
         )
     except discord.HTTPException:
         paranoia_rounds.pop(round_id, None)
-        await interaction.followup.send("I could not DM that user. Ask them to enable DMs and try again.")
+        await interaction.followup.send(embed=build_paranoia_failure_embed(), ephemeral=True)
         return
 
     round_data.dm_channel_id = dm_message.channel.id
     round_data.dm_message_id = dm_message.id
-    ack_message = await interaction.followup.send(
-        "Paranoia question sent. The anonymous answer will show up here once they reply."
+    public_channel = interaction.channel
+    if public_channel is not None and isinstance(public_channel, (discord.TextChannel, discord.Thread)):
+        ack_message = await public_channel.send(embed=build_paranoia_launch_embed(round_data))
+        round_data.ack_message_id = ack_message.id
+
+    await interaction.followup.send(
+        content="🫢 Paranoia sent. The public card was posted without your name.",
+        ephemeral=True,
     )
-    round_data.ack_message_id = ack_message.id
 
 
 @bot.tree.command(name="todstats", description="Show prompt pool size and anti-repeat status.")
