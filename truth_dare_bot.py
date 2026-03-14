@@ -1003,10 +1003,20 @@ def build_paranoia_footer_text(round_data: ParanoiaRound, *, include_type: bool 
 
 def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = False) -> str:
     reveal_line = "Your answer was sent anonymously." if answered else "Your name stays out of the public reveal."
+    hint_line = (
+        "**-# Locked in. The public reveal already has your anonymous answer.**"
+        if answered
+        else "**-# Reply once. Keep it funny, clean, and server-safe.**"
+    )
     return "\n".join(
         [
+            f"-# 🔗 From",
+            f"<#{round_data.channel_id}>",
+            f"**-# 👤 || Sent by {escape_md(round_data.requester_name)}**",
+            "",
             f"**-# 🎭 Reveal style**",
             f"**{reveal_line}**",
+            hint_line,
         ]
     )
 
@@ -1396,26 +1406,17 @@ class ParanoiaAnswerView(discord.ui.LayoutView):
         if not answered:
             button.callback = self.answer_callback
 
-        hint_line = (
-            "**-# Locked in. The public reveal already has your anonymous answer.**"
-            if answered
-            else "**-# Reply once. Keep it funny, clean, and server-safe.**"
-        )
-
         container = discord.ui.Container(
             accent_color=0x57F287 if answered else GAME_COLORS["paranoia"],
         )
-        container.add_item(discord.ui.TextDisplay("**-# Truth OR Dare • Paranoia**"))
         container.add_item(
             discord.ui.TextDisplay(
-                "**### ✅ Answer locked in**" if answered else "**### 🤫 Secret Paranoia Drop**"
+                "**-# Truth OR Dare • Paranoia**\n"
+                + ("**### ✅ Answer locked in**" if answered else "**### 🤫 Secret Paranoia Drop**")
             )
         )
         container.add_item(discord.ui.TextDisplay(f"### {escape_md(round_data.prompt.text)}"))
-        container.add_item(discord.ui.TextDisplay(f"-# 🔗 From\n<#{round_data.channel_id}>"))
-        container.add_item(discord.ui.TextDisplay(f"**-# 👤 || Sent by {escape_md(round_data.requester_name)}**"))
         container.add_item(discord.ui.TextDisplay(build_paranoia_dm_details(round_data, answered=answered)))
-        container.add_item(discord.ui.TextDisplay(hint_line))
         row = discord.ui.ActionRow()
         row.add_item(button)
         container.add_item(row)
