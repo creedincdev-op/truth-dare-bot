@@ -61,6 +61,7 @@ LOGIN_429_COOLDOWN_MAX_SECONDS = max(
 AI_PARANOIA_REFRESH_SECONDS = max(300, int(os.getenv("AI_PARANOIA_REFRESH_SECONDS", "1800")))
 AI_PARANOIA_BATCH_SIZE = max(3, int(os.getenv("AI_PARANOIA_BATCH_SIZE", "6")))
 AI_PARANOIA_CACHE_TARGET = max(AI_PARANOIA_BATCH_SIZE, int(os.getenv("AI_PARANOIA_CACHE_TARGET", "18")))
+CONTROL_REPLY_TTL_SECONDS = max(8, int(os.getenv("CONTROL_REPLY_TTL_SECONDS", "20")))
 BLOCKED_AI_TERMS = {
     "politics",
     "religion",
@@ -88,6 +89,11 @@ SCOPE_CHOICES = [
     app_commands.Choice(name="This channel", value="channel"),
     app_commands.Choice(name="This server", value="server"),
 ]
+DEFAULT_DEV_USER_IDS = {1240237445841420302}
+
+
+def command_prefix(_bot: commands.Bot, _message: discord.Message) -> tuple[str, ...]:
+    return ("<<", "<")
 
 
 @dataclass(slots=True)
@@ -959,7 +965,7 @@ def build_prompt_embed(prompt: PromptResult, requester_user: discord.abc.User | 
 
 def build_paranoia_dm_embed(round_data: ParanoiaRound) -> discord.Embed:
     embed = discord.Embed(
-        title="Paranoia",
+        title="🫣 Secret Paranoia Round",
         description=(
             f"**Question**\n"
             f"> {round_data.prompt.text}\n\n"
@@ -967,6 +973,7 @@ def build_paranoia_dm_embed(round_data: ParanoiaRound) -> discord.Embed:
         ),
         color=GAME_COLORS["paranoia"],
     )
+    embed.set_author(name="Truth OR Dare • Paranoia")
     embed.add_field(
         name="👤 Sent by",
         value=f"**{round_data.requester_name}**",
@@ -978,20 +985,21 @@ def build_paranoia_dm_embed(round_data: ParanoiaRound) -> discord.Embed:
         inline=True,
     )
     embed.add_field(
-        name="🫥 Answer style",
-        value="Your name stays out of the public answer card.",
+        name="💬 Answer style",
+        value="Your name stays out of the public reveal.",
         inline=False,
     )
-    embed.set_footer(text=f"Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id}")
+    embed.set_footer(text=f"Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id} • ☕❤ by yuvraj")
     return embed
 
 
 def build_paranoia_reveal_embed(round_data: ParanoiaRound) -> discord.Embed:
     embed = discord.Embed(
-        title="Anonymous Paranoia Reveal",
+        title="🎭 Anonymous Paranoia Reveal",
         description=f"> {round_data.prompt.text}",
         color=GAME_COLORS["paranoia"],
     )
+    embed.set_author(name="Truth OR Dare • Paranoia")
     embed.add_field(
         name="💬 Anonymous answer",
         value=round_data.answer_text or "No answer provided.",
@@ -1002,16 +1010,17 @@ def build_paranoia_reveal_embed(round_data: ParanoiaRound) -> discord.Embed:
         value=f"`#{round_data.channel_name}` in **{round_data.guild_name}**",
         inline=False,
     )
-    embed.set_footer(text=f"Type: PARANOIA | Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id}")
+    embed.set_footer(text=f"Type: PARANOIA | Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id} • ☕❤ by yuvraj")
     return embed
 
 
 def build_paranoia_launch_embed(round_data: ParanoiaRound) -> discord.Embed:
     embed = discord.Embed(
-        title="Paranoia question sent",
+        title="🫥 Anonymous Paranoia Started",
         description="The target got a private question. Their anonymous answer will land here when they reply.",
         color=GAME_COLORS["paranoia"],
     )
+    embed.set_author(name="Truth OR Dare • Paranoia")
     embed.add_field(
         name="📍 Round",
         value=f"`#{round_data.channel_name}` in **{round_data.guild_name}**",
@@ -1022,13 +1031,13 @@ def build_paranoia_launch_embed(round_data: ParanoiaRound) -> discord.Embed:
         value="Question in DM. Answer comes back anonymously.",
         inline=True,
     )
-    embed.set_footer(text="The bot message does not expose who requested or answered.")
+    embed.set_footer(text="No requester or answerer is shown here • ☕❤ by yuvraj")
     return embed
 
 
 def build_paranoia_failure_embed() -> discord.Embed:
     embed = discord.Embed(
-        title="Paranoia could not be delivered",
+        title="📭 Paranoia could not be delivered",
         description="I could not DM that user. Ask them to open DMs and try again.",
         color=0xED4245,
     )
@@ -1241,11 +1250,6 @@ class ParanoiaAnswerView(discord.ui.View):
         button.callback = self.answer_callback
         self.add_item(button)
 
-        round_data = paranoia_rounds.get(round_id)
-        if round_data is not None:
-            jump_url = f"https://discord.com/channels/{round_data.guild_id}/{round_data.channel_id}"
-            self.add_item(discord.ui.Button(label="Jump to channel", emoji="🔗", url=jump_url))
-
     async def answer_callback(self, interaction: discord.Interaction) -> None:
         round_data = paranoia_rounds.get(self.round_id)
         if round_data is None or round_data.status != "awaiting_answer":
@@ -1267,14 +1271,22 @@ class TruthDareBot(commands.Bot):
     ) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
-        super().__init__(command_prefix="!", intents=intents)
+        intents.guild_messages = True
+        intents.dm_messages = True
+        intents.message_content = True
+        super().__init__(
+            command_prefix=command_prefix,
+            intents=intents,
+            help_command=None,
+            case_insensitive=True,
+        )
         self.prompt_engine = prompt_engine
         self.commands_synced = False
         self.runtime_settings = runtime_settings
         self.ai_prompt_service = ai_prompt_service
         self.ai_cache_prompts = ai_cache_prompts
         self.ai_refresh_task: asyncio.Task | None = None
-        self.dev_user_ids: set[int] = {
+        self.dev_user_ids: set[int] = set(DEFAULT_DEV_USER_IDS) | {
             int(value)
             for value in re.split(r"[,\s]+", read_env("BOT_OWNER_IDS", "DISCORD_DEVELOPER_IDS", fallback=""))
             if value.strip().isdigit()
@@ -1474,17 +1486,6 @@ bot = TruthDareBot(
     ai_cache_prompts=ai_cache_prompts,
 )
 
-admin_group = app_commands.Group(
-    name="todadmin",
-    description="Admin controls for the bot.",
-    default_permissions=discord.Permissions(manage_guild=True),
-)
-dev_group = app_commands.Group(
-    name="toddev",
-    description="Developer controls for the bot.",
-    default_permissions=discord.Permissions(administrator=True),
-)
-
 
 async def send_game_prompt(interaction: discord.Interaction, game: str, rating: str | None = None) -> None:
     if not await check_bot_enabled(interaction):
@@ -1581,7 +1582,9 @@ async def paranoia_command(
     paranoia_rounds[round_id] = round_data
 
     try:
+        jump_url = f"https://discord.com/channels/{round_data.guild_id}/{round_data.channel_id}"
         dm_message = await target.send(
+            content=jump_url,
             embed=build_paranoia_dm_embed(round_data),
             view=ParanoiaAnswerView(bot, round_id),
         )
@@ -1627,117 +1630,296 @@ async def tod_stats(interaction: discord.Interaction) -> None:
     await interaction.followup.send(content, ephemeral=True)
 
 
-@admin_group.command(name="disableall", description="Disable the bot in this channel or server.")
-@app_commands.describe(scope="Where the bot should be disabled")
-@app_commands.choices(scope=SCOPE_CHOICES)
-async def admin_disableall(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
-    await interaction.response.defer(ephemeral=True)
-    await apply_disable_toggle(interaction, scope.value, True)
+async def safe_delete_message(message: discord.Message) -> None:
+    try:
+        await message.delete()
+    except discord.HTTPException:
+        pass
 
 
-@admin_group.command(name="enableall", description="Re-enable the bot in this channel or server.")
-@app_commands.describe(scope="Where the bot should be re-enabled")
-@app_commands.choices(scope=SCOPE_CHOICES)
-async def admin_enableall(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
-    await interaction.response.defer(ephemeral=True)
-    await apply_disable_toggle(interaction, scope.value, False)
+def parse_scope(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"channel", "server"}:
+        return normalized
+    return None
 
 
-@admin_group.command(name="status", description="Show current admin control status.")
-async def admin_status(interaction: discord.Interaction) -> None:
-    await interaction.response.send_message(
-        embed=build_control_status_embed(bot, interaction),
-        ephemeral=True,
+def build_admin_help_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="Admin controls",
+        description="These controls auto-hide in chat and work only for server admins.",
+        color=0x5865F2,
     )
-
-
-@dev_group.command(name="disableall", description="Developer override to disable the bot in this channel or server.")
-@app_commands.describe(scope="Where the bot should be disabled")
-@app_commands.choices(scope=SCOPE_CHOICES)
-async def dev_disableall(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
-    if not await ensure_developer(interaction):
-        return
-    await interaction.response.defer(ephemeral=True)
-    await apply_disable_toggle(interaction, scope.value, True)
-
-
-@dev_group.command(name="enableall", description="Developer override to re-enable the bot in this channel or server.")
-@app_commands.describe(scope="Where the bot should be re-enabled")
-@app_commands.choices(scope=SCOPE_CHOICES)
-async def dev_enableall(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
-    if not await ensure_developer(interaction):
-        return
-    await interaction.response.defer(ephemeral=True)
-    await apply_disable_toggle(interaction, scope.value, False)
-
-
-@dev_group.command(name="status", description="Show developer control status.")
-async def dev_status(interaction: discord.Interaction) -> None:
-    if not await ensure_developer(interaction):
-        return
-    await interaction.response.send_message(
-        embed=build_control_status_embed(bot, interaction),
-        ephemeral=True,
+    embed.add_field(
+        name="<adminhelp",
+        value="Show this admin help panel.",
+        inline=False,
     )
-
-
-@dev_group.command(name="reloadprompts", description="Reload local prompt packs and AI cache.")
-async def dev_reloadprompts(interaction: discord.Interaction) -> None:
-    if not await ensure_developer(interaction):
-        return
-    await interaction.response.defer(ephemeral=True)
-    bot.reload_prompt_engine()
-    await interaction.followup.send("Prompt packs and AI cache reloaded.", ephemeral=True)
-
-
-@dev_group.command(name="clearhistory", description="Clear no-repeat memory for this channel or server.")
-@app_commands.describe(scope="Clear channel memory or whole server memory")
-@app_commands.choices(scope=SCOPE_CHOICES)
-async def dev_clearhistory(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
-    if not await ensure_developer(interaction):
-        return
-    await interaction.response.defer(ephemeral=True)
-    if scope.value == "server":
-        bot.prompt_engine.clear_history(guild_id=interaction.guild_id)
-    else:
-        bot.prompt_engine.clear_history(channel_id=interaction.channel_id)
-    await interaction.followup.send(
-        f"Cleared no-repeat memory for **{'this server' if scope.value == 'server' else 'this channel'}**.",
-        ephemeral=True,
+    embed.add_field(
+        name="<disableall channel | server",
+        value="Disable the bot in the current channel or entire server.",
+        inline=False,
     )
-
-
-@dev_group.command(name="fillparanoia", description="Force-generate more AI paranoia prompts.")
-@app_commands.describe(batch_size="How many prompts to request per rating")
-async def dev_fillparanoia(interaction: discord.Interaction, batch_size: app_commands.Range[int, 3, 12] = AI_PARANOIA_BATCH_SIZE) -> None:
-    if not await ensure_developer(interaction):
-        return
-    await interaction.response.defer(ephemeral=True)
-    added = await bot.refresh_ai_paranoia_cache(batch_size=batch_size)
-    await interaction.followup.send(
-        f"AI paranoia refresh completed. Added **{added}** prompts.",
-        ephemeral=True,
+    embed.add_field(
+        name="<enableall channel | server",
+        value="Re-enable the bot in the current channel or entire server.",
+        inline=False,
     )
+    embed.add_field(
+        name="<adminstatus",
+        value="Show current disable state and prompt totals.",
+        inline=False,
+    )
+    embed.set_footer(text="Use in a server where you have Manage Server.")
+    return embed
 
 
-@dev_group.command(name="sync", description="Force a slash-command sync.")
-@app_commands.describe(scope="Choose guild for fast testing or global for the full bot")
-@app_commands.choices(
-    scope=[
-        app_commands.Choice(name="Guild", value="guild"),
-        app_commands.Choice(name="Global", value="global"),
+def build_dev_help_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="Developer controls",
+        description="Hidden developer controls for runtime, prompt packs, and sync.",
+        color=0xF1C40F,
+    )
+    lines = [
+        "<<devhelp",
+        "<<devstatus",
+        "<<disableall channel | server",
+        "<<enableall channel | server",
+        "<<reloadprompts",
+        "<<clearhistory channel | server",
+        f"<<fillparanoia [3-{AI_PARANOIA_BATCH_SIZE if AI_PARANOIA_BATCH_SIZE > 3 else 12}]",
+        "<<sync guild | global",
     ]
-)
-async def dev_sync(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
-    if not await ensure_developer(interaction):
+    embed.add_field(name="Commands", value="\n".join(f"`{line}`" for line in lines), inline=False)
+    embed.add_field(
+        name="Notes",
+        value="Use `<<` only. Replies auto-hide in chat and are locked to your user ID.",
+        inline=False,
+    )
+    embed.set_footer(text="Developer locked to your user ID.")
+    return embed
+
+
+async def send_hidden_control_response(
+    ctx: commands.Context[Any],
+    *,
+    embed: discord.Embed | None = None,
+    content: str | None = None,
+    ttl: int = CONTROL_REPLY_TTL_SECONDS,
+) -> None:
+    await safe_delete_message(ctx.message)
+    kwargs: dict[str, Any] = {
+        "delete_after": ttl,
+        "allowed_mentions": discord.AllowedMentions.none(),
+    }
+    if embed is not None:
+        kwargs["embed"] = embed
+    if content is not None:
+        kwargs["content"] = content
+    try:
+        await ctx.channel.send(**kwargs)
+    except discord.HTTPException:
+        pass
+
+
+async def ensure_admin_ctx(ctx: commands.Context[Any]) -> bool:
+    if ctx.guild is None:
+        await send_hidden_control_response(ctx, content="This command only works in servers.")
+        return False
+    member = ctx.author if isinstance(ctx.author, discord.Member) else None
+    if member is None or not member.guild_permissions.manage_guild:
+        await send_hidden_control_response(ctx, content="You need Manage Server to use this.")
+        return False
+    return True
+
+
+async def ensure_dev_ctx(ctx: commands.Context[Any]) -> bool:
+    if not bot.is_developer_user(ctx.author.id):
+        await send_hidden_control_response(ctx, content="Developer-only command.")
+        return False
+    return True
+
+
+@bot.command(name="adminhelp")
+async def prefix_adminhelp(ctx: commands.Context[Any]) -> None:
+    if ctx.prefix != "<":
         return
-    await interaction.response.defer(ephemeral=True)
-    sync_scope = await bot.sync_command_tree(guild_only=(scope.value == "guild"))
-    await interaction.followup.send(f"Command sync finished using **{sync_scope}** scope.", ephemeral=True)
+    if not await ensure_admin_ctx(ctx):
+        return
+    await send_hidden_control_response(ctx, embed=build_admin_help_embed())
 
 
-bot.tree.add_command(admin_group)
-bot.tree.add_command(dev_group)
+@bot.command(name="disableall")
+async def prefix_disableall(ctx: commands.Context[Any], scope: str | None = None) -> None:
+    if ctx.prefix == "<<":
+        if not await ensure_dev_ctx(ctx):
+            return
+    else:
+        if not await ensure_admin_ctx(ctx):
+            return
+
+    parsed_scope = parse_scope(scope)
+    if parsed_scope is None:
+        await send_hidden_control_response(ctx, content="Use `<disableall channel` or `<disableall server`.")
+        return
+
+    if ctx.guild is None:
+        await send_hidden_control_response(ctx, content="This command only works in servers.")
+        return
+
+    if parsed_scope == "server":
+        bot.runtime_settings.disabled_guilds.add(ctx.guild.id)
+    else:
+        bot.runtime_settings.disabled_channels.add(ctx.channel.id)
+    save_runtime_settings(bot.runtime_settings)
+    await send_hidden_control_response(
+        ctx,
+        embed=discord.Embed(
+            title="Bot disabled",
+            description=f"Disabled in **{'this server' if parsed_scope == 'server' else 'this channel'}**.",
+            color=0xED4245,
+        ),
+    )
+
+
+@bot.command(name="enableall")
+async def prefix_enableall(ctx: commands.Context[Any], scope: str | None = None) -> None:
+    if ctx.prefix == "<<":
+        if not await ensure_dev_ctx(ctx):
+            return
+    else:
+        if not await ensure_admin_ctx(ctx):
+            return
+
+    parsed_scope = parse_scope(scope)
+    if parsed_scope is None:
+        await send_hidden_control_response(ctx, content="Use `<enableall channel` or `<enableall server`.")
+        return
+
+    if ctx.guild is None:
+        await send_hidden_control_response(ctx, content="This command only works in servers.")
+        return
+
+    if parsed_scope == "server":
+        bot.runtime_settings.disabled_guilds.discard(ctx.guild.id)
+    else:
+        bot.runtime_settings.disabled_channels.discard(ctx.channel.id)
+    save_runtime_settings(bot.runtime_settings)
+    await send_hidden_control_response(
+        ctx,
+        embed=discord.Embed(
+            title="Bot enabled",
+            description=f"Enabled in **{'this server' if parsed_scope == 'server' else 'this channel'}**.",
+            color=0x57F287,
+        ),
+    )
+
+
+@bot.command(name="adminstatus")
+async def prefix_adminstatus(ctx: commands.Context[Any]) -> None:
+    if ctx.prefix != "<":
+        return
+    if not await ensure_admin_ctx(ctx):
+        return
+    fake_interaction = type("StatusCtx", (), {"guild_id": ctx.guild.id if ctx.guild else None, "channel_id": ctx.channel.id})()
+    await send_hidden_control_response(ctx, embed=build_control_status_embed(bot, fake_interaction))
+
+
+@bot.command(name="devhelp")
+async def prefix_devhelp(ctx: commands.Context[Any]) -> None:
+    if ctx.prefix != "<<":
+        return
+    if not await ensure_dev_ctx(ctx):
+        return
+    await send_hidden_control_response(ctx, embed=build_dev_help_embed())
+
+
+@bot.command(name="devstatus")
+async def prefix_devstatus(ctx: commands.Context[Any]) -> None:
+    if ctx.prefix != "<<":
+        return
+    if not await ensure_dev_ctx(ctx):
+        return
+    fake_interaction = type("StatusCtx", (), {"guild_id": ctx.guild.id if ctx.guild else None, "channel_id": ctx.channel.id})()
+    await send_hidden_control_response(ctx, embed=build_control_status_embed(bot, fake_interaction))
+
+
+@bot.command(name="reloadprompts")
+async def prefix_reloadprompts(ctx: commands.Context[Any]) -> None:
+    if ctx.prefix != "<<":
+        return
+    if not await ensure_dev_ctx(ctx):
+        return
+    bot.reload_prompt_engine()
+    await send_hidden_control_response(
+        ctx,
+        embed=discord.Embed(title="Prompt packs reloaded", color=0x57F287),
+    )
+
+
+@bot.command(name="clearhistory")
+async def prefix_clearhistory(ctx: commands.Context[Any], scope: str | None = None) -> None:
+    if ctx.prefix != "<<":
+        return
+    if not await ensure_dev_ctx(ctx):
+        return
+    parsed_scope = parse_scope(scope)
+    if parsed_scope is None:
+        await send_hidden_control_response(ctx, content="Use `<<clearhistory channel` or `<<clearhistory server`.")
+        return
+    if parsed_scope == "server":
+        bot.prompt_engine.clear_history(guild_id=ctx.guild.id if ctx.guild else None)
+    else:
+        bot.prompt_engine.clear_history(channel_id=ctx.channel.id)
+    await send_hidden_control_response(
+        ctx,
+        embed=discord.Embed(
+            title="History cleared",
+            description=f"Cleared **{parsed_scope}** repeat memory.",
+            color=0x57F287,
+        ),
+    )
+
+
+@bot.command(name="fillparanoia")
+async def prefix_fillparanoia(ctx: commands.Context[Any], batch_size: str | None = None) -> None:
+    if ctx.prefix != "<<":
+        return
+    if not await ensure_dev_ctx(ctx):
+        return
+    size = AI_PARANOIA_BATCH_SIZE
+    if batch_size and batch_size.isdigit():
+        size = max(3, min(12, int(batch_size)))
+    added = await bot.refresh_ai_paranoia_cache(batch_size=size)
+    await send_hidden_control_response(
+        ctx,
+        embed=discord.Embed(
+            title="AI paranoia refresh done",
+            description=f"Added **{added}** prompts.",
+            color=0x57F287,
+        ),
+    )
+
+
+@bot.command(name="sync")
+async def prefix_sync(ctx: commands.Context[Any], scope: str | None = None) -> None:
+    if ctx.prefix != "<<":
+        return
+    if not await ensure_dev_ctx(ctx):
+        return
+    normalized = (scope or "guild").strip().lower()
+    guild_only = normalized != "global"
+    sync_scope = await bot.sync_command_tree(guild_only=guild_only)
+    await send_hidden_control_response(
+        ctx,
+        embed=discord.Embed(
+            title="Command sync complete",
+            description=f"Synced using **{sync_scope}** scope.",
+            color=0x57F287,
+        ),
+    )
 
 
 def extract_retry_after_seconds(exc: discord.HTTPException, fallback_seconds: int) -> int:
