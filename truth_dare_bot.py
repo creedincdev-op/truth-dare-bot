@@ -987,7 +987,7 @@ def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = Fal
     reveal_line = "Your answer was sent anonymously." if answered else "Your name stays out of the public reveal."
     return "\n\n".join(
         [
-            f"**🔗 From**\n[{escape_md(round_data.guild_name)} • # {escape_md(round_data.channel_name)}]({build_paranoia_jump_url(round_data)})",
+            f"**🔗 From**\n{escape_md(round_data.guild_name)} • <#{round_data.channel_id}>",
             f"**👤 Sent by**\n{escape_md(round_data.requester_name)}",
             f"**🎭 Reveal style**\n{reveal_line}",
         ]
@@ -1003,10 +1003,12 @@ def build_paranoia_card_container(
     footer: str,
     accessory_url: str | None = None,
     actions: list[discord.ui.Button[Any]] | None = None,
+    headline_prefix: str = "##",
+    show_separator: bool = True,
 ) -> discord.ui.Container:
     container = discord.ui.Container(accent_color=accent_color)
     container.add_item(discord.ui.TextDisplay(f"-# {eyebrow}"))
-    container.add_item(discord.ui.TextDisplay(f"## {headline}"))
+    container.add_item(discord.ui.TextDisplay(f"{headline_prefix} {headline}"))
 
     if accessory_url:
         container.add_item(discord.ui.Section(body, accessory=discord.ui.Thumbnail(accessory_url)))
@@ -1019,7 +1021,8 @@ def build_paranoia_card_container(
             row.add_item(action)
         container.add_item(row)
 
-    container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.large))
+    if show_separator:
+        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.large))
     container.add_item(discord.ui.TextDisplay(footer))
     return container
 
@@ -1034,6 +1037,8 @@ def build_paranoia_card_view(
     accessory_url: str | None = None,
     actions: list[discord.ui.Button[Any]] | None = None,
     timeout: float | None = None,
+    headline_prefix: str = "##",
+    show_separator: bool = True,
 ) -> discord.ui.LayoutView:
     view = discord.ui.LayoutView(timeout=timeout)
     container = build_paranoia_card_container(
@@ -1044,6 +1049,8 @@ def build_paranoia_card_view(
         footer=footer,
         accessory_url=accessory_url,
         actions=actions,
+        headline_prefix=headline_prefix,
+        show_separator=show_separator,
     )
     view.add_item(container)
     return view
@@ -1183,9 +1190,9 @@ def build_prompt_footer_text(prompt: PromptResult) -> str:
 def build_prompt_details_text(prompt: PromptResult, requester_name: str | None) -> str:
     lines: list[str] = []
     if requester_name:
-        lines.append(f"**👤 Requested by**\n{escape_md(requester_name)}")
-    lines.append(f"**✨ Details**\n{titleize_category(prompt.category)} • {prompt.rating}")
-    return "\n\n".join(lines)
+        lines.append(f"-# \U0001F464 Requested by {escape_md(requester_name)}")
+    lines.append(f"-# \u2728 {titleize_category(prompt.category)} \u2022 {prompt.rating}")
+    return "\n".join(lines)
 
 
 class PromptCardView(discord.ui.LayoutView):
@@ -1214,6 +1221,8 @@ class PromptCardView(discord.ui.LayoutView):
                 footer=build_prompt_footer_text(prompt),
                 accessory_url=None,
                 actions=actions,
+                headline_prefix="###",
+                show_separator=False,
             )
         )
 
@@ -1376,13 +1385,13 @@ class ParanoiaAnswerView(discord.ui.LayoutView):
         container = discord.ui.Container(
             accent_color=0x57F287 if answered else GAME_COLORS["paranoia"],
         )
-        container.add_item(discord.ui.TextDisplay("### Truth OR Dare • Paranoia"))
+        container.add_item(discord.ui.TextDisplay("## Truth OR Dare • Paranoia"))
         container.add_item(
             discord.ui.TextDisplay(
-                "## ✅ Answer locked in" if answered else "## 🤫 Secret Paranoia Drop"
+                "## 🤫 Secret Paranoia Drop" if not answered else "## ✅ Answer locked in"
             )
         )
-        container.add_item(discord.ui.TextDisplay(f"# {escape_md(round_data.prompt.text)}"))
+        container.add_item(discord.ui.TextDisplay(f"### {escape_md(round_data.prompt.text)}"))
         container.add_item(discord.ui.TextDisplay(body))
         row = discord.ui.ActionRow()
         row.add_item(button)
