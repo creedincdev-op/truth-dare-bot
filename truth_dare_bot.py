@@ -35,7 +35,7 @@ SETTINGS_FILE = DATA_DIR / "bot_settings.json"
 AI_CACHE_FILE = DATA_DIR / "ai_prompt_cache.json"
 
 RATINGS = ["PG", "PG13", "R"]
-COFFEE_EMOJI = "\u2615\ufe0f"
+COFFEE_EMOJI = "\u2615"
 BRAIN_EMOJI = "\U0001F9E0"
 MADE_WITH_TAG = f"Made with {COFFEE_EMOJI} and {BRAIN_EMOJI} By Yuvraj"
 BRANDED_GUILD_IDS = {
