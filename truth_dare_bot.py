@@ -990,6 +990,36 @@ def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = Fal
     )
 
 
+def build_paranoia_dm_embed(round_data: ParanoiaRound, *, answered: bool = False) -> discord.Embed:
+    embed = discord.Embed(
+        title=escape_md(round_data.prompt.text),
+        description=(
+            "**Truth OR Dare • Paranoia**\n"
+            + ("✅ Answer locked in" if answered else "🤫 Secret Paranoia Drop")
+        ),
+        color=0x57F287 if answered else GAME_COLORS["paranoia"],
+    )
+    if round_data.requester_name:
+        embed.set_author(
+            name=f"Sent by {escape_md(round_data.requester_name)}",
+            icon_url=round_data.requester_avatar_url or None,
+        )
+    embed.add_field(name="🔗 From", value=f"<#{round_data.channel_id}>", inline=False)
+    embed.add_field(
+        name="🎭 Reveal style",
+        value="Your answer was sent anonymously." if answered else "Your name stays out of the public reveal.",
+        inline=False,
+    )
+    hint_text = (
+        "Your anonymous answer is locked in and the public reveal is out."
+        if answered
+        else "Drop the one answer that makes the whole chat go silent for a second."
+    )
+    embed.add_field(name="\u200b", value=f"{hint_text}\n────────────────", inline=False)
+    embed.set_footer(text=f"Rating {round_data.prompt.rating} • ID {round_data.prompt.id} • {MADE_WITH_TAG}")
+    return embed
+
+
 def build_paranoia_card_container(
     *,
     eyebrow: str,
@@ -1329,7 +1359,10 @@ class ParanoiaAnswerModal(discord.ui.Modal, title="Anonymous Answer"):
         if isinstance(dm_channel, discord.DMChannel) and round_data.dm_message_id:
             try:
                 dm_message = await dm_channel.fetch_message(round_data.dm_message_id)
-                await dm_message.edit(view=ParanoiaAnswerView(self.bot_instance, self.round_id, answered=True))
+                await dm_message.edit(
+                    embed=build_paranoia_dm_embed(round_data, answered=True),
+                    view=ParanoiaAnswerView(self.bot_instance, self.round_id, answered=True),
+                )
             except discord.HTTPException:
                 pass
 
@@ -1337,7 +1370,7 @@ class ParanoiaAnswerModal(discord.ui.Modal, title="Anonymous Answer"):
         await interaction.response.send_message("Answer sent anonymously.")
 
 
-class ParanoiaAnswerView(discord.ui.LayoutView):
+class ParanoiaAnswerView(discord.ui.View):
     def __init__(self, bot_instance: "TruthDareBot", round_id: str, *, answered: bool = False) -> None:
         super().__init__(timeout=None if answered else 1800)
         self.bot_instance = bot_instance
@@ -1355,41 +1388,7 @@ class ParanoiaAnswerView(discord.ui.LayoutView):
         )
         if not answered:
             button.callback = self.answer_callback
-
-        hint_line = (
-            "-# Locked in. The public reveal already has your anonymous answer."
-            if answered
-            else "-# Reply once. Keep it funny, clean, and server-safe."
-        )
-
-        container = discord.ui.Container(
-            accent_color=0x57F287 if answered else GAME_COLORS["paranoia"],
-        )
-        container.add_item(discord.ui.TextDisplay("#### Truth OR Dare • Paranoia"))
-        container.add_item(
-            discord.ui.TextDisplay(
-                "## 🤫 Secret Paranoia Drop" if not answered else "## ✅ Answer locked in"
-            )
-        )
-        container.add_item(discord.ui.TextDisplay(f"# {escape_md(round_data.prompt.text)}"))
-        container.add_item(discord.ui.TextDisplay(f"-# 🔗 From\n<#{round_data.channel_id}>"))
-        if round_data.requester_avatar_url:
-            container.add_item(
-                discord.ui.Section(
-                    f"-# Sent by {escape_md(round_data.requester_name)}",
-                    accessory=discord.ui.Thumbnail(round_data.requester_avatar_url),
-                )
-            )
-        else:
-            container.add_item(discord.ui.TextDisplay(f"-# Sent by {escape_md(round_data.requester_name)}"))
-        container.add_item(discord.ui.TextDisplay(build_paranoia_dm_details(round_data, answered=answered)))
-        container.add_item(discord.ui.TextDisplay(hint_line))
-        row = discord.ui.ActionRow()
-        row.add_item(button)
-        container.add_item(row)
-        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-        container.add_item(discord.ui.TextDisplay(build_paranoia_footer_text(round_data, include_type=False)))
-        self.add_item(container)
+        self.add_item(button)
 
     async def answer_callback(self, interaction: discord.Interaction) -> None:
         round_data = paranoia_rounds.get(self.round_id)
@@ -1736,6 +1735,7 @@ async def paranoia_command(
 
     try:
         dm_message = await target.send(
+            embed=build_paranoia_dm_embed(round_data),
             view=ParanoiaAnswerView(bot, round_id),
         )
     except discord.HTTPException:
