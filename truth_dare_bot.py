@@ -34,7 +34,7 @@ SETTINGS_FILE = DATA_DIR / "bot_settings.json"
 AI_CACHE_FILE = DATA_DIR / "ai_prompt_cache.json"
 
 RATINGS = ["PG", "PG13", "R"]
-MADE_WITH_TAG = "Made with \u2615 and \U0001f9e0 By Yuvraj"
+MADE_WITH_TAG = "Made with \u2615\ufe0f and \U0001f9e0 By Yuvraj"
 GAME_LABELS = {
     "truth_or_dare": "Truth or Dare",
     "truth": "Truth",
@@ -985,11 +985,16 @@ def build_paranoia_footer_text(round_data: ParanoiaRound, *, include_type: bool 
 
 def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = False) -> str:
     reveal_line = "Your answer was sent anonymously." if answered else "Your name stays out of the public reveal."
-    return "\n\n".join(
+    return "\n".join(
         [
-            f"**🔗 From**\n{escape_md(round_data.guild_name)} • <#{round_data.channel_id}>",
-            f"**👤 Sent by**\n{escape_md(round_data.requester_name)}",
-            f"**🎭 Reveal style**\n{reveal_line}",
+            f"**🔗 From**",
+            f"<#{round_data.channel_id}>",
+            "",
+            f"**👤 Sent by**",
+            f"{escape_md(round_data.requester_name)}",
+            "",
+            f"**🎭 Reveal style**",
+            f"{reveal_line}",
         ]
     )
 
@@ -1188,11 +1193,12 @@ def build_prompt_footer_text(prompt: PromptResult) -> str:
 
 
 def build_prompt_details_text(prompt: PromptResult, requester_name: str | None) -> str:
-    lines: list[str] = []
+    parts: list[str] = []
     if requester_name:
-        lines.append(f"-# \U0001F464 Requested by {escape_md(requester_name)}")
-    lines.append(f"-# \u2728 {titleize_category(prompt.category)} \u2022 {prompt.rating}")
-    return "\n".join(lines)
+        parts.append(f"\U0001F464 {escape_md(requester_name)}")
+    parts.append(f"\u2728 {titleize_category(prompt.category)}")
+    parts.append(prompt.rating)
+    return f"-# {' \u2022 '.join(parts)}"
 
 
 class PromptCardView(discord.ui.LayoutView):
@@ -1221,7 +1227,7 @@ class PromptCardView(discord.ui.LayoutView):
                 footer=build_prompt_footer_text(prompt),
                 accessory_url=None,
                 actions=actions,
-                headline_prefix="###",
+                headline_prefix="####",
                 show_separator=False,
             )
         )
@@ -1385,14 +1391,22 @@ class ParanoiaAnswerView(discord.ui.LayoutView):
         container = discord.ui.Container(
             accent_color=0x57F287 if answered else GAME_COLORS["paranoia"],
         )
-        container.add_item(discord.ui.TextDisplay("## Truth OR Dare • Paranoia"))
+        container.add_item(discord.ui.TextDisplay("### Truth OR Dare • Paranoia"))
         container.add_item(
             discord.ui.TextDisplay(
                 "## 🤫 Secret Paranoia Drop" if not answered else "## ✅ Answer locked in"
             )
         )
-        container.add_item(discord.ui.TextDisplay(f"### {escape_md(round_data.prompt.text)}"))
-        container.add_item(discord.ui.TextDisplay(body))
+        container.add_item(discord.ui.TextDisplay(f"# {escape_md(round_data.prompt.text)}"))
+        if round_data.requester_avatar_url:
+            container.add_item(
+                discord.ui.Section(
+                    body,
+                    accessory=discord.ui.Thumbnail(round_data.requester_avatar_url),
+                )
+            )
+        else:
+            container.add_item(discord.ui.TextDisplay(body))
         row = discord.ui.ActionRow()
         row.add_item(button)
         container.add_item(row)
