@@ -948,7 +948,7 @@ def build_prompt_embed(
     )
     embed.add_field(
         name=escape_md(prompt.text),
-        value=f"Rating-✨ {titleize_category(prompt.category)} • {prompt.rating}",
+        value=f"Rating✨ {titleize_category(prompt.category)} • {prompt.rating}",
         inline=False,
     )
     embed.set_footer(text=f"ID {prompt.id} • {MADE_WITH_TAG}")
