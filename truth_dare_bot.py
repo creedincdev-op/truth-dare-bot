@@ -4,6 +4,7 @@ import random
 import re
 import secrets
 import time
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,12 +19,19 @@ try:
 except ImportError:  # pragma: no cover
     load_dotenv = None
 
+try:
+    from openai import OpenAI
+except ImportError:  # pragma: no cover
+    OpenAI = None
+
 
 ROOT_DIR = Path(__file__).resolve().parent
 DATA_DIR = ROOT_DIR / "data"
 CORE_PROMPT_FILE = DATA_DIR / "core_prompt_catalog.json"
 PROMPT_POOL_FILE = DATA_DIR / "prompt_pools.json"
 STATUS_FILE = DATA_DIR / "runtime_status.json"
+SETTINGS_FILE = DATA_DIR / "bot_settings.json"
+AI_CACHE_FILE = DATA_DIR / "ai_prompt_cache.json"
 
 RATINGS = ["PG", "PG13", "R"]
 GAME_LABELS = {
@@ -50,6 +58,36 @@ LOGIN_429_COOLDOWN_MAX_SECONDS = max(
     LOGIN_429_COOLDOWN_SECONDS,
     int(os.getenv("BOT_LOGIN_429_COOLDOWN_MAX", "7200")),
 )
+AI_PARANOIA_REFRESH_SECONDS = max(300, int(os.getenv("AI_PARANOIA_REFRESH_SECONDS", "1800")))
+AI_PARANOIA_BATCH_SIZE = max(3, int(os.getenv("AI_PARANOIA_BATCH_SIZE", "6")))
+AI_PARANOIA_CACHE_TARGET = max(AI_PARANOIA_BATCH_SIZE, int(os.getenv("AI_PARANOIA_CACHE_TARGET", "18")))
+BLOCKED_AI_TERMS = {
+    "politics",
+    "religion",
+    "caste",
+    "racist",
+    "race",
+    "suicide",
+    "self harm",
+    "body count",
+    "nude",
+    "naked",
+    "slur",
+    "cheating",
+    "abuse",
+    "pregnant",
+    "pregnancy",
+    "sex",
+    "hookup",
+    "drunk",
+    "weed",
+    "drug",
+    "alcohol",
+}
+SCOPE_CHOICES = [
+    app_commands.Choice(name="This channel", value="channel"),
+    app_commands.Choice(name="This server", value="server"),
+]
 
 
 @dataclass(slots=True)
@@ -61,6 +99,7 @@ class PromptEntry:
     tone: str
     weight: float
     key: str
+    server_only: bool = False
 
 
 @dataclass(slots=True)
@@ -100,6 +139,7 @@ class ParanoiaRound:
     channel_id: int
     channel_name: str
     requester_id: int
+    requester_name: str
     target_user_id: int
     prompt: PromptResult
     status: str = "awaiting_answer"
@@ -107,6 +147,12 @@ class ParanoiaRound:
     dm_channel_id: int | None = None
     dm_message_id: int | None = None
     answer_text: str | None = None
+
+
+@dataclass(slots=True)
+class RuntimeSettings:
+    disabled_guilds: set[int] = field(default_factory=set)
+    disabled_channels: set[int] = field(default_factory=set)
 
 
 paranoia_rounds: dict[str, ParanoiaRound] = {}
@@ -118,6 +164,10 @@ def utc_now_iso() -> str:
 
 def ensure_storage() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def normalize_for_filter(text: str | None) -> str:
+    return normalize_text(text).replace("  ", " ")
 
 
 def read_env(*names: str, fallback: str = "") -> str:
@@ -149,6 +199,11 @@ def sanitize_prompt(text: str | None) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip()
 
 
+def contains_blocked_ai_term(text: str) -> bool:
+    normalized = normalize_for_filter(text)
+    return any(term in normalized for term in BLOCKED_AI_TERMS)
+
+
 def titleize_category(category: str) -> str:
     return category.replace("_", " ").title()
 
@@ -159,6 +214,41 @@ def build_prompt_key(game: str, category: str, rating: str, text: str) -> str:
 
 def short_id(prefix: str = "tod") -> str:
     return f"{prefix}_{secrets.token_urlsafe(6)}"
+
+
+def load_runtime_settings() -> RuntimeSettings:
+    if not SETTINGS_FILE.exists():
+        return RuntimeSettings()
+
+    try:
+        payload = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return RuntimeSettings()
+
+    return RuntimeSettings(
+        disabled_guilds={int(value) for value in payload.get("disabled_guilds", [])},
+        disabled_channels={int(value) for value in payload.get("disabled_channels", [])},
+    )
+
+
+def save_runtime_settings(settings: RuntimeSettings) -> None:
+    ensure_storage()
+    SETTINGS_FILE.write_text(
+        json.dumps(
+            {
+                "disabled_guilds": sorted(settings.disabled_guilds),
+                "disabled_channels": sorted(settings.disabled_channels),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def is_location_disabled(settings: RuntimeSettings, guild_id: int | None, channel_id: int | None) -> bool:
+    return (guild_id is not None and guild_id in settings.disabled_guilds) or (
+        channel_id is not None and channel_id in settings.disabled_channels
+    )
 
 
 def build_prompt_signature(text: str) -> set[str]:
@@ -208,6 +298,7 @@ def load_prompt_catalog() -> list[PromptEntry]:
                     tone=sanitize_prompt(item.get("tone")) or category,
                     weight=float(item.get("weight") or 1.0),
                     key=sanitize_prompt(item.get("key")) or build_prompt_key(game, category, rating, text),
+                    server_only=bool(item.get("server_only")),
                 )
             )
         if prompts:
@@ -228,16 +319,448 @@ def load_prompt_catalog() -> list[PromptEntry]:
             prompts.append(PromptEntry("dare", "social", "PG13", clean, "social", 1.0, build_prompt_key("dare", "social", "PG13", clean)))
     return prompts
 
+
+def append_prompt(
+    prompts: list[PromptEntry],
+    seen_keys: set[str],
+    *,
+    game: str,
+    category: str,
+    rating: str,
+    text: str,
+    tone: str,
+    weight: float = 1.0,
+    server_only: bool = False,
+) -> None:
+    clean = sanitize_prompt(text)
+    if not clean:
+        return
+    key = build_prompt_key(game, category, rating, clean)
+    if key in seen_keys:
+        return
+    seen_keys.add(key)
+    prompts.append(
+        PromptEntry(
+            game=game,
+            category=category,
+            rating=rating,
+            text=clean,
+            tone=tone,
+            weight=weight,
+            key=key,
+            server_only=server_only,
+        )
+    )
+
+
+def extend_with_server_reference_prompts(prompts: list[PromptEntry]) -> list[PromptEntry]:
+    seen_keys = {prompt.key for prompt in prompts}
+    server_prompts = list(prompts)
+
+    truth_prompts = {
+        "PG": [
+            "Which person in this server could expose your personality the fastest?",
+            "Whose messages in this server do you read first when they pop up?",
+            "What is your most obvious habit in this server that people have definitely noticed?",
+            "Which channel in this server matches your real personality the most?",
+            "Who in this server would instantly know when you are pretending to be calm?",
+            "What is the most embarrassing way this server could roast your typing style?",
+            "Which person in this server do you think has the funniest timing?",
+            "What is one thing you always notice in this server but never say out loud?",
+            "Who in this server would make you the most nervous if they suddenly DMed you?",
+            "What is your most unserious habit when you are lurking in this server?",
+            "Which person in this server would you trust to write your public apology?",
+            "What is the most suspicious reason you have checked the member list here?",
+            "Whose reaction in this server affects your confidence more than it should?",
+            "What is your biggest fake-calm move in this server?",
+            "Who in this server has the energy of knowing exactly what you are up to?",
+            "Which server moment would you erase from your own memory first?",
+            "Whose approval in this server would secretly mean way too much to you?",
+            "What is the most obvious thing about you during voice chat in this server?",
+        ],
+        "PG13": [
+            "Who in this server could distract you with one good reply?",
+            "Whose message in this server could make you smile and hide your phone immediately?",
+            "What is the boldest thing you would admit about your vibe in this server?",
+            "Who in this server would make you act the most different from your normal self?",
+            "Whose attention in this server would boost your ego the fastest?",
+            "What is your most obvious tell when one specific person is active in this server?",
+            "Which person in this server could get away with teasing you the easiest?",
+            "Who in this server could make you overthink one harmless message for hours?",
+            "What is the softest thing you would do if the right person in this server gave you attention?",
+            "Whose voice in this server would ruin your ability to act normal the fastest?",
+            "Who in this server would you trust with one dangerous secret and instantly regret trusting?",
+            "What is your most delusional thought you could have about someone active in this server?",
+        ],
+        "R": [
+            "Who in this server could make you fold with almost no effort?",
+            "What is the riskiest harmless thought you could have about someone in this server and still deny later?",
+            "Who in this server could get one smooth line out of you and completely change your mood?",
+            "Whose late-night presence in this server would make you the least trustworthy version of yourself?",
+            "What is the boldest harmless thing you would admit about someone in this server noticing you?",
+            "Who in this server could make you act unbothered while clearly failing at it?",
+        ],
+    }
+
+    dare_prompts = {
+        "PG": [
+            "Drop a one-line review of this server like it is a chaotic restaurant.",
+            "Tag one person in this server and give them a clean movie title.",
+            "Post the safest photo from your gallery that somehow matches this server's vibe.",
+            "Send a fake patch note about your behavior in this server.",
+            "Type a dramatic apology to this server for your most obvious chat habit.",
+            "React to the last five visible messages with your best fitting emoji.",
+            "Send a one-line trailer voiceover for the current state of this server.",
+            "Post a harmless confession beginning with 'This server made me realize...'",
+            "Rename your mood in one line as if this server caused it.",
+            "Tag someone and tell them what role they would play in a low-budget series about this server.",
+            "Drop a harmless hot take about this server using exactly six words.",
+            "Send the most dramatic safe status update about what this server does to your concentration.",
+            "Type your next message in this channel like a sports commentator.",
+            "Post one safe picture of the nearest object that represents your energy in this server.",
+            "Compliment the funniest person you can think of in this server without using the word funny.",
+        ],
+        "PG13": [
+            "Send one suspiciously confident line that could only exist in this server and then refuse to explain it.",
+            "Tag the person with the most dangerous timing in this server and give them a clean title.",
+            "Post a safe selfie angle or hand photo and caption it like this server is your audience.",
+            "Drop a one-line warning for anyone who underestimates your energy in this server.",
+            "Send a harmlessly bold review of the current vibe in this server.",
+            "Type a message that sounds like you know something about this server and then add 'allegedly'.",
+            "Describe your current server aura in one dramatic sentence.",
+            "Give this server a fake episode title based on what happened today.",
+            "Send the cleanest one-line flex you can get away with in this server.",
+            "Tag someone in this server and assign them the role of final boss, narrator, or plot twist.",
+        ],
+        "R": [
+            "Send one dangerously confident harmless line and let the server judge it.",
+            "Post the smoothest safe caption you can think of for this server and do not explain it.",
+            "Type the most suspicious clean sentence possible about the current server vibe.",
+            "Tag the person here with the strongest menace-to-composure energy and give no context.",
+            "Drop one late-night-quality line that is bold but still clean enough to survive this server.",
+        ],
+    }
+
+    nhie_prompts = {
+        "PG": [
+            "Never have I ever checked who was online in this server for no reason.",
+            "Never have I ever typed a whole message in this server and deleted it.",
+            "Never have I ever stalked the member list here and acted like I did not.",
+            "Never have I ever laughed at the wrong thing in this server and hoped nobody noticed.",
+            "Never have I ever stayed in this server chat only for the unfolding drama.",
+            "Never have I ever read old messages in this server just to reconnect the lore.",
+            "Never have I ever acted busy while clearly watching this server in real time.",
+            "Never have I ever waited for one specific person to say something in this server.",
+            "Never have I ever opened this server to procrastinate and stayed way longer than planned.",
+            "Never have I ever acted confident in this server while fully guessing the vibe.",
+        ],
+        "PG13": [
+            "Never have I ever smiled at my screen because of someone active in this server.",
+            "Never have I ever checked whether one specific person was online in this server.",
+            "Never have I ever overthought one harmless message from someone in this server.",
+            "Never have I ever acted less interested in this server than I actually was.",
+            "Never have I ever hoped one specific person in this server would notice a message or post.",
+            "Never have I ever replayed a good conversation from this server in my head later.",
+            "Never have I ever changed my tone in this server because one person was around.",
+        ],
+        "R": [
+            "Never have I ever acted fully unbothered in this server while clearly caring too much.",
+            "Never have I ever stayed online in this server for one conversation I had no business waiting for.",
+            "Never have I ever typed something bold in this server and then replaced it with something safe.",
+            "Never have I ever let one tiny interaction in this server affect my whole mood.",
+        ],
+    }
+
+    paranoia_prompts = {
+        "PG": [
+            "Who here would start the funniest chaos in this server and then act innocent?",
+            "Who here would get exposed first by their own reaction history in this server?",
+            "Who here would have the best secret folder of screenshots from this server?",
+            "Who here would narrate this server like a reality show if given the chance?",
+            "Who here would accidentally leak the funniest detail during voice chat?",
+            "Who here would know the most server lore without ever admitting it?",
+            "Who here would turn one random message in this server into a full investigation?",
+            "Who here would panic first if the wrong screenshot from this server got posted?",
+            "Whose name comes to mind first for the biggest quiet observer in this server?",
+            "Who here would make the best fake spokesperson for this server?",
+            "Who here would be caught lurking at the exact wrong time in this server?",
+            "Who here would absolutely say 'I know nothing' while knowing everything in this server?",
+        ],
+        "PG13": [
+            "Who here would fold first after one suspiciously good reply in this server?",
+            "Who here would act chill in this server while clearly watching one specific person?",
+            "Who here would post something subtle in this server just for one person to notice?",
+            "Who here would overanalyze one clean flirty message in this server the longest?",
+            "Whose name comes to mind first for the most dangerous reply timing in this server?",
+            "Who here would pretend not to care in this server and fail immediately?",
+            "Who here would have the highest chance of smiling at their screen because of this server?",
+            "Who here would say something playful in this server and shift the whole vibe?",
+            "Who here would act the smoothest in this server until it was time to actually be smooth?",
+            "Who here would check for one specific reaction in this server faster than they should admit?",
+        ],
+        "R": [
+            "Who here would create the most harmless tension in this server with almost no effort?",
+            "Who here would act the most composed in this server while their thoughts are complete chaos?",
+            "Whose name comes to mind first for someone who would send the boldest clean line in this server?",
+            "Who here would get the most dangerous confidence boost from one good interaction in this server?",
+            "Who here would make the rest of this server start guessing with one suspicious sentence?",
+            "Who here would cause the biggest late-night spiral in this server by doing almost nothing?",
+        ],
+    }
+
+    for rating, items in truth_prompts.items():
+        category = "social" if rating == "PG" else "bold"
+        tone = "social" if rating == "PG" else "bold"
+        for text in items:
+            append_prompt(
+                server_prompts,
+                seen_keys,
+                game="truth",
+                category=category,
+                rating=rating,
+                text=text,
+                tone=tone,
+                weight=1.08,
+                server_only=True,
+            )
+
+    for rating, items in dare_prompts.items():
+        category = "social" if rating == "PG" else "bold"
+        for text in items:
+            append_prompt(
+                server_prompts,
+                seen_keys,
+                game="dare",
+                category=category,
+                rating=rating,
+                text=text,
+                tone="social" if rating == "PG" else "bold",
+                weight=1.08,
+                server_only=True,
+            )
+
+    for rating, items in nhie_prompts.items():
+        category = "social" if rating != "R" else "bold"
+        tone = "social" if rating != "R" else "bold"
+        for text in items:
+            append_prompt(
+                server_prompts,
+                seen_keys,
+                game="never_have_i_ever",
+                category=category,
+                rating=rating,
+                text=text,
+                tone=tone,
+                weight=1.07,
+                server_only=True,
+            )
+
+    for rating, items in paranoia_prompts.items():
+        category = "social" if rating == "PG" else "bold"
+        tone = "social" if rating == "PG" else "bold"
+        for text in items:
+            append_prompt(
+                server_prompts,
+                seen_keys,
+                game="paranoia",
+                category=category,
+                rating=rating,
+                text=text,
+                tone=tone,
+                weight=1.09,
+                server_only=True,
+            )
+
+    return server_prompts
+
+
+def load_ai_cache() -> list[PromptEntry]:
+    if not AI_CACHE_FILE.exists():
+        return []
+
+    try:
+        payload = json.loads(AI_CACHE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    prompts: list[PromptEntry] = []
+    for item in payload.get("prompts", []):
+        text = sanitize_prompt(item.get("text"))
+        game = sanitize_prompt(item.get("game"))
+        category = sanitize_prompt(item.get("category")) or "social"
+        rating = sanitize_prompt(item.get("rating")) or "PG"
+        tone = sanitize_prompt(item.get("tone")) or category
+        if not text or game != "paranoia" or rating not in RATINGS or contains_blocked_ai_term(text):
+            continue
+        prompts.append(
+            PromptEntry(
+                game="paranoia",
+                category=category if category in {"social", "bold", "flirty"} else "social",
+                rating=rating,
+                text=text,
+                tone=tone if tone in {"social", "bold", "flirty"} else "social",
+                weight=float(item.get("weight") or 1.02),
+                key=sanitize_prompt(item.get("key")) or build_prompt_key("paranoia", category, rating, text),
+                server_only=False,
+            )
+        )
+    return prompts
+
+
+def save_ai_cache(prompts: list[PromptEntry]) -> None:
+    ensure_storage()
+    payload = {
+        "prompts": [
+            {
+                "game": prompt.game,
+                "category": prompt.category,
+                "rating": prompt.rating,
+                "text": prompt.text,
+                "tone": prompt.tone,
+                "weight": prompt.weight,
+                "key": prompt.key,
+            }
+            for prompt in prompts
+            if prompt.game == "paranoia"
+        ]
+    }
+    AI_CACHE_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+class AIPromptService:
+    def __init__(self, api_key: str, model: str = "gpt-4.1-mini") -> None:
+        self.enabled = bool(api_key and OpenAI is not None)
+        self.model = model
+        self.client = OpenAI(api_key=api_key) if self.enabled else None
+
+    async def generate_paranoia_pack(
+        self,
+        *,
+        rating: str,
+        recent_prompts: list[str],
+        batch_size: int,
+    ) -> list[PromptEntry]:
+        if not self.enabled or self.client is None:
+            return []
+        return await asyncio.to_thread(
+            self._generate_paranoia_pack_sync,
+            rating,
+            recent_prompts,
+            batch_size,
+        )
+
+    def _generate_paranoia_pack_sync(
+        self,
+        rating: str,
+        recent_prompts: list[str],
+        batch_size: int,
+    ) -> list[PromptEntry]:
+        recent_block = "\n".join(f"{index + 1}. {entry}" for index, entry in enumerate(recent_prompts[:20]))
+        instruction = "\n".join(
+            [
+                "Return only a JSON array.",
+                f"Generate {batch_size} unique Discord paranoia prompts.",
+                "Each item must be an object with keys: category, tone, text.",
+                "Allowed category values: social, bold, flirty.",
+                "Allowed tone values: social, bold, flirty.",
+                f"Rating: {rating}",
+                "Focus on Discord server energy: channels, member lists, reactions, voice chat, lurking, timing, screenshots, status, vibes.",
+                "Make them funny, clever, crazy, unique, and playable in a server.",
+                "Keep them controversy-free and non-explicit.",
+                "No politics, religion, caste, race, trauma, abuse, cheating accusations, explicit sexual content, or slurs.",
+                "Avoid generic or stale prompts like hottest person, best kisser, biggest crush.",
+                "Most prompts should start with 'Who here' or 'Whose'.",
+                "Recent prompts to avoid:",
+                recent_block or "(none)",
+            ]
+        )
+
+        response = self.client.responses.create(
+            model=self.model,
+            input=instruction,
+            temperature=1.05,
+            max_output_tokens=1400,
+        )
+        raw_text = sanitize_prompt(getattr(response, "output_text", ""))
+        if raw_text.startswith("```"):
+            raw_text = re.sub(r"^```(?:json)?", "", raw_text).strip()
+            raw_text = re.sub(r"```$", "", raw_text).strip()
+
+        start = raw_text.find("[")
+        end = raw_text.rfind("]")
+        if start == -1 or end == -1 or end <= start:
+            return []
+
+        try:
+            items = json.loads(raw_text[start : end + 1])
+        except json.JSONDecodeError:
+            return []
+
+        prompts: list[PromptEntry] = []
+        seen_keys: set[str] = set()
+        for item in items:
+            text = sanitize_prompt(item.get("text"))
+            category = sanitize_prompt(item.get("category")).lower() or "social"
+            tone = sanitize_prompt(item.get("tone")).lower() or category
+            if (
+                not text
+                or category not in {"social", "bold", "flirty"}
+                or tone not in {"social", "bold", "flirty"}
+                or contains_blocked_ai_term(text)
+            ):
+                continue
+            key = build_prompt_key("paranoia", category, rating, text)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            prompts.append(
+                PromptEntry(
+                    game="paranoia",
+                    category=category,
+                    rating=rating,
+                    text=text,
+                    tone=tone,
+                    weight=1.03,
+                    key=key,
+                    server_only=False,
+                )
+            )
+
+        return prompts
+
 class PromptEngine:
     def __init__(self, prompts: list[PromptEntry], recent_history_limit: int = 220) -> None:
         self.prompts = prompts
         self.recent_history_limit = recent_history_limit
         self.state_by_channel: dict[int, ChannelState] = {}
+        self.state_by_guild: dict[int, ChannelState] = {}
+        self.prompt_index: set[str] = {prompt.key for prompt in prompts}
 
     def get_channel_state(self, channel_id: int) -> ChannelState:
         if channel_id not in self.state_by_channel:
             self.state_by_channel[channel_id] = ChannelState()
         return self.state_by_channel[channel_id]
+
+    def get_guild_state(self, guild_id: int) -> ChannelState:
+        if guild_id not in self.state_by_guild:
+            self.state_by_guild[guild_id] = ChannelState()
+        return self.state_by_guild[guild_id]
+
+    def extend_prompts(self, prompts: list[PromptEntry]) -> int:
+        added = 0
+        for prompt in prompts:
+            if prompt.key in self.prompt_index:
+                continue
+            self.prompt_index.add(prompt.key)
+            self.prompts.append(prompt)
+            added += 1
+        return added
+
+    def clear_history(self, *, channel_id: int | None = None, guild_id: int | None = None) -> None:
+        if channel_id is not None and channel_id in self.state_by_channel:
+            self.state_by_channel[channel_id] = ChannelState()
+        if guild_id is not None and guild_id in self.state_by_guild:
+            self.state_by_guild[guild_id] = ChannelState()
 
     def get_counts(self) -> dict[str, int]:
         counts = {game: 0 for game in GAME_LABELS if game != "truth_or_dare"}
@@ -260,15 +783,25 @@ class PromptEngine:
             return random.choice(["truth", "dare"])
         return requested_game
 
-    def record_prompt(self, channel_id: int, prompt: PromptEntry) -> None:
-        state = self.get_channel_state(channel_id)
+    def _record_to_state(self, state: ChannelState, prompt: PromptEntry) -> None:
         state.used_by_game.setdefault(prompt.game, set()).add(prompt.key)
         state.usage_counts[prompt.key] = state.usage_counts.get(prompt.key, 0) + 1
         state.history.insert(0, HistoryEntry(prompt.key, prompt.game, prompt.category, prompt.tone, prompt.text))
         if len(state.history) > self.recent_history_limit:
             state.history.pop()
 
-    def score_candidates(self, candidates: list[PromptEntry], state: ChannelState) -> list[tuple[PromptEntry, float]]:
+    def record_prompt(self, channel_id: int, guild_id: int | None, prompt: PromptEntry) -> None:
+        self._record_to_state(self.get_channel_state(channel_id), prompt)
+        if guild_id is not None:
+            self._record_to_state(self.get_guild_state(guild_id), prompt)
+
+    def score_candidates(
+        self,
+        candidates: list[PromptEntry],
+        state: ChannelState,
+        *,
+        prefer_server_prompts: bool = False,
+    ) -> list[tuple[PromptEntry, float]]:
         recent_entries = state.history[:80]
         recent_signatures = [build_prompt_signature(entry.text) for entry in recent_entries[:18] if build_prompt_signature(entry.text)]
         recent_categories = [entry.category for entry in recent_entries[:8]]
@@ -288,6 +821,8 @@ class PromptEngine:
             usage_penalty = state.usage_counts.get(prompt.key, 0) * 0.06
             score = overlap + category_penalty + game_penalty + tone_penalty + flirty_penalty + usage_penalty
             weight = max(0.1, prompt.weight) * (1 / (1 + max(0.0, score * 2.5)))
+            if prefer_server_prompts and prompt.server_only:
+                weight *= 1.28
             scored.append((prompt, weight))
 
         scored.sort(key=lambda item: item[1], reverse=True)
@@ -298,33 +833,64 @@ class PromptEngine:
         *,
         requested_game: str,
         channel_id: int,
+        guild_id: int | None,
         requester_tag: str,
         rating: str | None = None,
     ) -> PromptResult:
         game = self.resolve_game(requested_game)
         effective_rating = rating if rating in RATINGS else "PG"
-        state = self.get_channel_state(channel_id)
-        matching = [prompt for prompt in self.prompts if prompt.game == game and prompt.rating == effective_rating]
+        channel_state = self.get_channel_state(channel_id)
+        guild_state = self.get_guild_state(guild_id) if guild_id is not None else None
+        matching = [
+            prompt
+            for prompt in self.prompts
+            if prompt.game == game
+            and prompt.rating == effective_rating
+            and (guild_id is not None or not prompt.server_only)
+        ]
 
         if not matching and rating is not None:
-            matching = [prompt for prompt in self.prompts if prompt.game == game]
+            matching = [
+                prompt
+                for prompt in self.prompts
+                if prompt.game == game
+                and (guild_id is not None or not prompt.server_only)
+            ]
         if not matching:
             raise RuntimeError(f"No prompts are available for {GAME_LABELS.get(game, game)}.")
 
-        used_keys = state.used_by_game.get(game, set())
-        recent_keys = {entry.key for entry in state.history[: self.recent_history_limit]}
+        used_keys = set(channel_state.used_by_game.get(game, set()))
+        recent_keys = {entry.key for entry in channel_state.history[: self.recent_history_limit]}
+        if guild_state is not None:
+            used_keys.update(guild_state.used_by_game.get(game, set()))
+            recent_keys.update(entry.key for entry in guild_state.history[: self.recent_history_limit])
         unseen = [prompt for prompt in matching if prompt.key not in used_keys and prompt.key not in recent_keys]
 
         if not unseen:
-            state.used_by_game[game] = set()
+            channel_state.used_by_game[game] = set()
+            if guild_state is not None:
+                guild_state.used_by_game[game] = set()
             unseen = [prompt for prompt in matching if prompt.key not in recent_keys]
 
         candidate_pool = unseen if unseen else [prompt for prompt in matching if prompt.key not in recent_keys]
         if not candidate_pool:
             candidate_pool = matching
 
-        selected = weighted_choice(self.score_candidates(candidate_pool, state)) or random.choice(candidate_pool)
-        self.record_prompt(channel_id, selected)
+        selected = weighted_choice(
+            self.score_candidates(
+                candidate_pool,
+                channel_state if guild_state is None else ChannelState(
+                    history=channel_state.history[:40] + guild_state.history[:40],
+                    used_by_game={},
+                    usage_counts={
+                        **guild_state.usage_counts,
+                        **channel_state.usage_counts,
+                    },
+                ),
+                prefer_server_prompts=guild_id is not None,
+            )
+        ) or random.choice(candidate_pool)
+        self.record_prompt(channel_id, guild_id, selected)
         return PromptResult(
             id=short_id(game),
             game=selected.game,
@@ -393,13 +959,18 @@ def build_prompt_embed(prompt: PromptResult, requester_user: discord.abc.User | 
 
 def build_paranoia_dm_embed(round_data: ParanoiaRound) -> discord.Embed:
     embed = discord.Embed(
-        title="🫣 You got a secret Paranoia drop",
+        title="Paranoia",
         description=(
             f"**Question**\n"
             f"> {round_data.prompt.text}\n\n"
-            f"Your reply goes back anonymously. Keep it funny, clean, and controversy-free."
+            f"Your reply goes back anonymously. Keep it funny, clean, and server-safe."
         ),
         color=GAME_COLORS["paranoia"],
+    )
+    embed.add_field(
+        name="👤 Sent by",
+        value=f"**{round_data.requester_name}**",
+        inline=True,
     )
     embed.add_field(
         name="📍 From",
@@ -407,22 +978,17 @@ def build_paranoia_dm_embed(round_data: ParanoiaRound) -> discord.Embed:
         inline=True,
     )
     embed.add_field(
-        name="🎭 Reveal style",
+        name="🫥 Answer style",
         value="Your name stays out of the public answer card.",
-        inline=True,
-    )
-    embed.add_field(
-        name="🧠 Tip",
-        value="Give the first answer that would make the chat spiral.",
         inline=False,
     )
-    embed.set_footer(text=f"🎯 Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id}")
+    embed.set_footer(text=f"Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id}")
     return embed
 
 
 def build_paranoia_reveal_embed(round_data: ParanoiaRound) -> discord.Embed:
     embed = discord.Embed(
-        title="🎭 Anonymous Paranoia Reveal",
+        title="Anonymous Paranoia Reveal",
         description=f"> {round_data.prompt.text}",
         color=GAME_COLORS["paranoia"],
     )
@@ -432,17 +998,17 @@ def build_paranoia_reveal_embed(round_data: ParanoiaRound) -> discord.Embed:
         inline=False,
     )
     embed.add_field(
-        name="🔥 Vibe",
-        value="Nobody gets named. Everyone still starts guessing.",
+        name="📍 Origin",
+        value=f"`#{round_data.channel_name}` in **{round_data.guild_name}**",
         inline=False,
     )
-    embed.set_footer(text=f"🎯 Type: PARANOIA | Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id}")
+    embed.set_footer(text=f"Type: PARANOIA | Rating: {round_data.prompt.rating} | ID: {round_data.prompt.id}")
     return embed
 
 
 def build_paranoia_launch_embed(round_data: ParanoiaRound) -> discord.Embed:
     embed = discord.Embed(
-        title="🫢 Paranoia question sent",
+        title="Paranoia question sent",
         description="The target got a private question. Their anonymous answer will land here when they reply.",
         color=GAME_COLORS["paranoia"],
     )
@@ -452,22 +1018,107 @@ def build_paranoia_launch_embed(round_data: ParanoiaRound) -> discord.Embed:
         inline=True,
     )
     embed.add_field(
-        name="👀 Mode",
+        name="🫥 Mode",
         value="Question in DM. Answer comes back anonymously.",
         inline=True,
     )
-    embed.set_footer(text="🫥 The bot message does not expose who requested or answered.")
+    embed.set_footer(text="The bot message does not expose who requested or answered.")
     return embed
 
 
 def build_paranoia_failure_embed() -> discord.Embed:
     embed = discord.Embed(
-        title="📭 Paranoia could not be delivered",
+        title="Paranoia could not be delivered",
         description="I could not DM that user. Ask them to open DMs and try again.",
         color=0xED4245,
     )
     embed.set_footer(text="No round was started.")
     return embed
+
+
+def build_disabled_embed(scope: str) -> discord.Embed:
+    label = "this server" if scope == "server" else "this channel"
+    return discord.Embed(
+        title="Bot disabled here",
+        description=f"This bot is currently disabled in {label}.",
+        color=0xED4245,
+    )
+
+
+def build_control_status_embed(bot_instance: "TruthDareBot", interaction: discord.Interaction) -> discord.Embed:
+    settings = bot_instance.runtime_settings
+    scope_lines = [
+        f"Server disabled: **{'Yes' if interaction.guild_id in settings.disabled_guilds else 'No'}**",
+        f"Channel disabled: **{'Yes' if (interaction.channel_id or 0) in settings.disabled_channels else 'No'}**",
+        f"Developer IDs loaded: **{len(bot_instance.dev_user_ids)}**",
+        f"AI paranoia refresh: **{'ON' if bot_instance.ai_prompt_service.enabled else 'OFF'}**",
+    ]
+    counts = bot_instance.prompt_engine.get_counts()
+    embed = discord.Embed(
+        title="Bot control status",
+        description="\n".join(scope_lines),
+        color=0x5865F2,
+    )
+    embed.add_field(
+        name="Prompt pools",
+        value=(
+            f"Truth **{counts.get('truth', 0):,}**\n"
+            f"Dare **{counts.get('dare', 0):,}**\n"
+            f"Never Ever **{counts.get('never_have_i_ever', 0):,}**\n"
+            f"Paranoia **{counts.get('paranoia', 0):,}**"
+        ),
+        inline=False,
+    )
+    return embed
+
+
+async def check_bot_enabled(interaction: discord.Interaction) -> bool:
+    if is_location_disabled(bot.runtime_settings, interaction.guild_id, interaction.channel_id):
+        scope = "server" if interaction.guild_id in bot.runtime_settings.disabled_guilds else "channel"
+        await interaction.response.send_message(embed=build_disabled_embed(scope), ephemeral=True)
+        return False
+    return True
+
+
+async def check_button_enabled(interaction: discord.Interaction) -> bool:
+    if is_location_disabled(bot.runtime_settings, interaction.guild_id, interaction.channel_id):
+        scope = "server" if interaction.guild_id in bot.runtime_settings.disabled_guilds else "channel"
+        await interaction.response.send_message(embed=build_disabled_embed(scope), ephemeral=True)
+        return False
+    return True
+
+
+async def ensure_developer(interaction: discord.Interaction) -> bool:
+    if bot.is_developer_user(interaction.user.id):
+        return True
+    await interaction.response.send_message("This command is developer-only.", ephemeral=True)
+    return False
+
+
+async def apply_disable_toggle(interaction: discord.Interaction, scope: str, disabled: bool) -> None:
+    if interaction.guild_id is None:
+        await interaction.followup.send("This command only works in servers.", ephemeral=True)
+        return
+
+    if scope == "server":
+        target_set = bot.runtime_settings.disabled_guilds
+        target_id = interaction.guild_id
+        label = "this server"
+    else:
+        target_set = bot.runtime_settings.disabled_channels
+        target_id = interaction.channel_id or 0
+        label = "this channel"
+
+    if disabled:
+        target_set.add(target_id)
+    else:
+        target_set.discard(target_id)
+
+    save_runtime_settings(bot.runtime_settings)
+    await interaction.followup.send(
+        f"{'Disabled' if disabled else 'Enabled'} the bot in **{label}**.",
+        ephemeral=True,
+    )
 
 
 class PromptButtonsView(discord.ui.View):
@@ -488,6 +1139,8 @@ class PromptButtonsView(discord.ui.View):
         button = discord.ui.Button(label=label, style=style)
 
         async def callback(interaction: discord.Interaction) -> None:
+            if not await check_button_enabled(interaction):
+                return
             await interaction.response.defer()
             if interaction.message is not None:
                 try:
@@ -510,7 +1163,7 @@ class PromptButtonsView(discord.ui.View):
         return button
 
 
-class ParanoiaAnswerModal(discord.ui.Modal, title="🎭 Anonymous Answer"):
+class ParanoiaAnswerModal(discord.ui.Modal, title="Anonymous Answer"):
     answer = discord.ui.TextInput(
         label="Your answer",
         style=discord.TextStyle.paragraph,
@@ -576,7 +1229,7 @@ class ParanoiaAnswerModal(discord.ui.Modal, title="🎭 Anonymous Answer"):
                 pass
 
         round_data.status = "answered"
-        await interaction.response.send_message("🎭 Answer sent anonymously.")
+        await interaction.response.send_message("Answer sent anonymously.")
 
 
 class ParanoiaAnswerView(discord.ui.View):
@@ -584,9 +1237,14 @@ class ParanoiaAnswerView(discord.ui.View):
         super().__init__(timeout=1800)
         self.bot_instance = bot_instance
         self.round_id = round_id
-        button = discord.ui.Button(label="Answer secretly", emoji="🎭", style=discord.ButtonStyle.primary)
+        button = discord.ui.Button(label="Answer", emoji="💬", style=discord.ButtonStyle.primary)
         button.callback = self.answer_callback
         self.add_item(button)
+
+        round_data = paranoia_rounds.get(round_id)
+        if round_data is not None:
+            jump_url = f"https://discord.com/channels/{round_data.guild_id}/{round_data.channel_id}"
+            self.add_item(discord.ui.Button(label="Jump to channel", emoji="🔗", url=jump_url))
 
     async def answer_callback(self, interaction: discord.Interaction) -> None:
         round_data = paranoia_rounds.get(self.round_id)
@@ -600,12 +1258,112 @@ class ParanoiaAnswerView(discord.ui.View):
 
 
 class TruthDareBot(commands.Bot):
-    def __init__(self, prompt_engine: PromptEngine) -> None:
+    def __init__(
+        self,
+        prompt_engine: PromptEngine,
+        runtime_settings: RuntimeSettings,
+        ai_prompt_service: AIPromptService,
+        ai_cache_prompts: list[PromptEntry],
+    ) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
         super().__init__(command_prefix="!", intents=intents)
         self.prompt_engine = prompt_engine
         self.commands_synced = False
+        self.runtime_settings = runtime_settings
+        self.ai_prompt_service = ai_prompt_service
+        self.ai_cache_prompts = ai_cache_prompts
+        self.ai_refresh_task: asyncio.Task | None = None
+        self.dev_user_ids: set[int] = {
+            int(value)
+            for value in re.split(r"[,\s]+", read_env("BOT_OWNER_IDS", "DISCORD_DEVELOPER_IDS", fallback=""))
+            if value.strip().isdigit()
+        }
+
+    async def hydrate_dev_user_ids(self) -> None:
+        try:
+            application_info = await self.application_info()
+        except discord.HTTPException:
+            return
+
+        owner = getattr(application_info, "owner", None)
+        team = getattr(application_info, "team", None)
+        if owner is not None:
+            self.dev_user_ids.add(owner.id)
+        if team is not None:
+            for member in team.members:
+                self.dev_user_ids.add(member.id)
+
+    def is_developer_user(self, user_id: int) -> bool:
+        return user_id in self.dev_user_ids
+
+    def reload_prompt_engine(self) -> None:
+        base_prompts = extend_with_server_reference_prompts(load_prompt_catalog())
+        self.ai_cache_prompts = load_ai_cache()
+        self.prompt_engine = PromptEngine(base_prompts)
+        self.prompt_engine.extend_prompts(self.ai_cache_prompts)
+
+    async def sync_command_tree(self, *, guild_only: bool) -> str:
+        guild_id = read_env_int("DISCORD_GUILD_ID", "GUILD_ID")
+        if guild_only and guild_id:
+            guild = discord.Object(id=guild_id)
+            await self.tree.sync(guild=guild)
+            return "guild"
+
+        await self.tree.sync()
+        return "global"
+
+    async def refresh_ai_paranoia_cache(self, *, batch_size: int | None = None) -> int:
+        if not self.ai_prompt_service.enabled:
+            return 0
+
+        existing_texts = [prompt.text for prompt in self.prompt_engine.prompts if prompt.game == "paranoia"]
+        added_total = 0
+        batch_target = batch_size or AI_PARANOIA_BATCH_SIZE
+        existing_cache_keys = {prompt.key for prompt in self.ai_cache_prompts}
+
+        for rating in RATINGS:
+            current_ai_count = sum(
+                1
+                for prompt in self.ai_cache_prompts
+                if prompt.game == "paranoia" and prompt.rating == rating
+            )
+            if current_ai_count >= AI_PARANOIA_CACHE_TARGET and batch_size is None:
+                continue
+
+            generated = await self.ai_prompt_service.generate_paranoia_pack(
+                rating=rating,
+                recent_prompts=existing_texts[-40:],
+                batch_size=batch_target,
+            )
+            if not generated:
+                continue
+
+            added = self.prompt_engine.extend_prompts(generated)
+            if added == 0:
+                continue
+
+            for prompt in generated:
+                if prompt.key not in existing_cache_keys:
+                    existing_cache_keys.add(prompt.key)
+                    self.ai_cache_prompts.append(prompt)
+                    existing_texts.append(prompt.text)
+
+            added_total += added
+
+        if added_total > 0:
+            save_ai_cache(self.ai_cache_prompts)
+
+        return added_total
+
+    async def ai_paranoia_refresh_loop(self) -> None:
+        await self.wait_until_ready()
+        while not self.is_closed():
+            try:
+                await self.refresh_ai_paranoia_cache()
+            except Exception as error:  # pragma: no cover
+                print(f"AI paranoia refresh failed: {error}")
+            await asyncio.sleep(AI_PARANOIA_REFRESH_SECONDS)
 
     async def on_ready(self) -> None:
         write_status(
@@ -614,6 +1372,7 @@ class TruthDareBot(commands.Bot):
             bot_user=str(self.user) if self.user else None,
             last_error=None,
         )
+        await self.hydrate_dev_user_ids()
         print(f"Logged in as {self.user}")
         counts = self.prompt_engine.get_counts()
         print(
@@ -623,6 +1382,9 @@ class TruthDareBot(commands.Bot):
             f"{counts.get('never_have_i_ever', 0)} NHIE, "
             f"{counts.get('paranoia', 0)} paranoia."
         )
+
+        if self.ai_prompt_service.enabled and self.ai_refresh_task is None:
+            self.ai_refresh_task = asyncio.create_task(self.ai_paranoia_refresh_loop())
 
         if self.commands_synced:
             return
@@ -694,18 +1456,44 @@ if load_dotenv is not None:
     load_dotenv(ROOT_DIR / ".env")
 
 TOKEN = read_env("BOT_TOKEN", "DISCORD_TOKEN")
+OPENAI_API_KEY = read_env("OPENAI_API_KEY")
+OPENAI_MODEL = read_env("OPENAI_MODEL", fallback="gpt-4.1-mini")
 if not TOKEN:
     raise RuntimeError("BOT_TOKEN or DISCORD_TOKEN is not set.")
 
-prompt_engine = PromptEngine(load_prompt_catalog())
-bot = TruthDareBot(prompt_engine=prompt_engine)
+runtime_settings = load_runtime_settings()
+ai_prompt_service = AIPromptService(api_key=OPENAI_API_KEY, model=OPENAI_MODEL)
+base_prompts = extend_with_server_reference_prompts(load_prompt_catalog())
+ai_cache_prompts = load_ai_cache()
+prompt_engine = PromptEngine(base_prompts)
+prompt_engine.extend_prompts(ai_cache_prompts)
+bot = TruthDareBot(
+    prompt_engine=prompt_engine,
+    runtime_settings=runtime_settings,
+    ai_prompt_service=ai_prompt_service,
+    ai_cache_prompts=ai_cache_prompts,
+)
+
+admin_group = app_commands.Group(
+    name="todadmin",
+    description="Admin controls for the bot.",
+    default_permissions=discord.Permissions(manage_guild=True),
+)
+dev_group = app_commands.Group(
+    name="toddev",
+    description="Developer controls for the bot.",
+    default_permissions=discord.Permissions(administrator=True),
+)
 
 
 async def send_game_prompt(interaction: discord.Interaction, game: str, rating: str | None = None) -> None:
+    if not await check_bot_enabled(interaction):
+        return
     await interaction.response.defer()
     prompt = await bot.prompt_engine.get_next_prompt(
         requested_game=game,
         channel_id=interaction.channel_id or 0,
+        guild_id=interaction.guild_id,
         requester_tag=str(interaction.user),
         rating=rating,
     )
@@ -755,6 +1543,9 @@ async def paranoia_command(
     target: discord.User,
     rating: app_commands.Choice[str] | None = None,
 ) -> None:
+    if not await check_bot_enabled(interaction):
+        return
+
     if interaction.guild_id is None:
         await interaction.response.send_message("This command only works in servers.", ephemeral=True)
         return
@@ -771,6 +1562,7 @@ async def paranoia_command(
     prompt = await bot.prompt_engine.get_next_prompt(
         requested_game="paranoia",
         channel_id=interaction.channel_id or 0,
+        guild_id=interaction.guild_id,
         requester_tag=str(interaction.user),
         rating=rating.value if rating else None,
     )
@@ -782,6 +1574,7 @@ async def paranoia_command(
         channel_id=interaction.channel_id or 0,
         channel_name=getattr(interaction.channel, "name", "unknown-channel"),
         requester_id=interaction.user.id,
+        requester_name=getattr(interaction.user, "global_name", None) or interaction.user.name,
         target_user_id=target.id,
         prompt=prompt,
     )
@@ -812,6 +1605,9 @@ async def paranoia_command(
 
 @bot.tree.command(name="todstats", description="Show prompt pool size and anti-repeat status.")
 async def tod_stats(interaction: discord.Interaction) -> None:
+    if not await check_bot_enabled(interaction):
+        return
+
     await interaction.response.defer(ephemeral=True)
     counts = bot.prompt_engine.get_counts()
     channel_stats = bot.prompt_engine.get_channel_stats(interaction.channel_id or 0)
@@ -829,6 +1625,119 @@ async def tod_stats(interaction: discord.Interaction) -> None:
         ]
     )
     await interaction.followup.send(content, ephemeral=True)
+
+
+@admin_group.command(name="disableall", description="Disable the bot in this channel or server.")
+@app_commands.describe(scope="Where the bot should be disabled")
+@app_commands.choices(scope=SCOPE_CHOICES)
+async def admin_disableall(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
+    await interaction.response.defer(ephemeral=True)
+    await apply_disable_toggle(interaction, scope.value, True)
+
+
+@admin_group.command(name="enableall", description="Re-enable the bot in this channel or server.")
+@app_commands.describe(scope="Where the bot should be re-enabled")
+@app_commands.choices(scope=SCOPE_CHOICES)
+async def admin_enableall(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
+    await interaction.response.defer(ephemeral=True)
+    await apply_disable_toggle(interaction, scope.value, False)
+
+
+@admin_group.command(name="status", description="Show current admin control status.")
+async def admin_status(interaction: discord.Interaction) -> None:
+    await interaction.response.send_message(
+        embed=build_control_status_embed(bot, interaction),
+        ephemeral=True,
+    )
+
+
+@dev_group.command(name="disableall", description="Developer override to disable the bot in this channel or server.")
+@app_commands.describe(scope="Where the bot should be disabled")
+@app_commands.choices(scope=SCOPE_CHOICES)
+async def dev_disableall(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
+    if not await ensure_developer(interaction):
+        return
+    await interaction.response.defer(ephemeral=True)
+    await apply_disable_toggle(interaction, scope.value, True)
+
+
+@dev_group.command(name="enableall", description="Developer override to re-enable the bot in this channel or server.")
+@app_commands.describe(scope="Where the bot should be re-enabled")
+@app_commands.choices(scope=SCOPE_CHOICES)
+async def dev_enableall(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
+    if not await ensure_developer(interaction):
+        return
+    await interaction.response.defer(ephemeral=True)
+    await apply_disable_toggle(interaction, scope.value, False)
+
+
+@dev_group.command(name="status", description="Show developer control status.")
+async def dev_status(interaction: discord.Interaction) -> None:
+    if not await ensure_developer(interaction):
+        return
+    await interaction.response.send_message(
+        embed=build_control_status_embed(bot, interaction),
+        ephemeral=True,
+    )
+
+
+@dev_group.command(name="reloadprompts", description="Reload local prompt packs and AI cache.")
+async def dev_reloadprompts(interaction: discord.Interaction) -> None:
+    if not await ensure_developer(interaction):
+        return
+    await interaction.response.defer(ephemeral=True)
+    bot.reload_prompt_engine()
+    await interaction.followup.send("Prompt packs and AI cache reloaded.", ephemeral=True)
+
+
+@dev_group.command(name="clearhistory", description="Clear no-repeat memory for this channel or server.")
+@app_commands.describe(scope="Clear channel memory or whole server memory")
+@app_commands.choices(scope=SCOPE_CHOICES)
+async def dev_clearhistory(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
+    if not await ensure_developer(interaction):
+        return
+    await interaction.response.defer(ephemeral=True)
+    if scope.value == "server":
+        bot.prompt_engine.clear_history(guild_id=interaction.guild_id)
+    else:
+        bot.prompt_engine.clear_history(channel_id=interaction.channel_id)
+    await interaction.followup.send(
+        f"Cleared no-repeat memory for **{'this server' if scope.value == 'server' else 'this channel'}**.",
+        ephemeral=True,
+    )
+
+
+@dev_group.command(name="fillparanoia", description="Force-generate more AI paranoia prompts.")
+@app_commands.describe(batch_size="How many prompts to request per rating")
+async def dev_fillparanoia(interaction: discord.Interaction, batch_size: app_commands.Range[int, 3, 12] = AI_PARANOIA_BATCH_SIZE) -> None:
+    if not await ensure_developer(interaction):
+        return
+    await interaction.response.defer(ephemeral=True)
+    added = await bot.refresh_ai_paranoia_cache(batch_size=batch_size)
+    await interaction.followup.send(
+        f"AI paranoia refresh completed. Added **{added}** prompts.",
+        ephemeral=True,
+    )
+
+
+@dev_group.command(name="sync", description="Force a slash-command sync.")
+@app_commands.describe(scope="Choose guild for fast testing or global for the full bot")
+@app_commands.choices(
+    scope=[
+        app_commands.Choice(name="Guild", value="guild"),
+        app_commands.Choice(name="Global", value="global"),
+    ]
+)
+async def dev_sync(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
+    if not await ensure_developer(interaction):
+        return
+    await interaction.response.defer(ephemeral=True)
+    sync_scope = await bot.sync_command_tree(guild_only=(scope.value == "guild"))
+    await interaction.followup.send(f"Command sync finished using **{sync_scope}** scope.", ephemeral=True)
+
+
+bot.tree.add_command(admin_group)
+bot.tree.add_command(dev_group)
 
 
 def extract_retry_after_seconds(exc: discord.HTTPException, fallback_seconds: int) -> int:
