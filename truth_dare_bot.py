@@ -963,7 +963,15 @@ def write_status(
 
 
 def build_prompt_footer_text(prompt: PromptResult, guild_id: int | None) -> str:
-    return f"-# ID {prompt.id}{maybe_brand_suffix(guild_id)}"
+    if should_show_branding(guild_id):
+        return f"-# ID {prompt.id}{maybe_brand_suffix(guild_id)}"
+    return f"-# ID {prompt.id} | Rating - ✨ {titleize_category(prompt.category)} • {prompt.rating}"
+
+
+def build_prompt_rating_text(prompt: PromptResult, guild_id: int | None) -> str | None:
+    if not should_show_branding(guild_id):
+        return None
+    return f"-# Rating - ✨ {titleize_category(prompt.category)} • {prompt.rating}"
 
 
 def build_prompt_requested_text(requester_name: str | None) -> str | None:
@@ -1217,9 +1225,9 @@ class PromptCardView(discord.ui.LayoutView):
         requested_text = build_prompt_requested_text(requester_name)
         if requested_text:
             container.add_item(discord.ui.TextDisplay(requested_text))
-        container.add_item(
-            discord.ui.TextDisplay(f"-# Rating - ✨ {titleize_category(prompt.category)} • {prompt.rating}")
-        )
+        rating_text = build_prompt_rating_text(prompt, guild_id)
+        if rating_text:
+            container.add_item(discord.ui.TextDisplay(rating_text))
         if actions:
             row = discord.ui.ActionRow()
             for action in actions:
