@@ -987,13 +987,7 @@ def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = Fal
     reveal_line = "Your answer was sent anonymously." if answered else "Your name stays out of the public reveal."
     return "\n".join(
         [
-            f"**🔗 From**",
-            f"<#{round_data.channel_id}>",
-            "",
-            f"**👤 Sent by**",
-            f"{escape_md(round_data.requester_name)}",
-            "",
-            f"**🎭 Reveal style**",
+            f"-# 🎭 Reveal style",
             f"{reveal_line}",
         ]
     )
@@ -1027,7 +1021,7 @@ def build_paranoia_card_container(
         container.add_item(row)
 
     if show_separator:
-        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.large))
+        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
     container.add_item(discord.ui.TextDisplay(footer))
     return container
 
@@ -1193,12 +1187,11 @@ def build_prompt_footer_text(prompt: PromptResult) -> str:
 
 
 def build_prompt_details_text(prompt: PromptResult, requester_name: str | None) -> str:
-    parts: list[str] = []
+    lines: list[str] = []
     if requester_name:
-        parts.append(f"\U0001F464 {escape_md(requester_name)}")
-    parts.append(f"\u2728 {titleize_category(prompt.category)}")
-    parts.append(prompt.rating)
-    return f"-# {' \u2022 '.join(parts)}"
+        lines.append(f"-# {GAME_LABELS.get(prompt.game, prompt.game)} | Requested by {escape_md(requester_name)}")
+    lines.append(f"-# ✨ {titleize_category(prompt.category)} • {prompt.rating}")
+    return "\n".join(lines)
 
 
 class PromptCardView(discord.ui.LayoutView):
@@ -1228,7 +1221,7 @@ class PromptCardView(discord.ui.LayoutView):
                 accessory_url=None,
                 actions=actions,
                 headline_prefix="####",
-                show_separator=False,
+                show_separator=True,
             )
         )
 
@@ -1379,38 +1372,38 @@ class ParanoiaAnswerView(discord.ui.LayoutView):
         if not answered:
             button.callback = self.answer_callback
 
-        body = "\n\n".join(
-            [
-                build_paranoia_dm_details(round_data, answered=answered),
-                "-# Reply once. Keep it funny, clean, and server-safe."
-                if not answered
-                else "-# Locked in. The public reveal already has your anonymous answer.",
-            ]
+        hint_line = (
+            "-# Locked in. The public reveal already has your anonymous answer."
+            if answered
+            else "-# Reply once. Keep it funny, clean, and server-safe."
         )
 
         container = discord.ui.Container(
             accent_color=0x57F287 if answered else GAME_COLORS["paranoia"],
         )
-        container.add_item(discord.ui.TextDisplay("### Truth OR Dare • Paranoia"))
+        container.add_item(discord.ui.TextDisplay("#### Truth OR Dare • Paranoia"))
         container.add_item(
             discord.ui.TextDisplay(
                 "## 🤫 Secret Paranoia Drop" if not answered else "## ✅ Answer locked in"
             )
         )
         container.add_item(discord.ui.TextDisplay(f"# {escape_md(round_data.prompt.text)}"))
+        container.add_item(discord.ui.TextDisplay(f"-# 🔗 From\n<#{round_data.channel_id}>"))
         if round_data.requester_avatar_url:
             container.add_item(
                 discord.ui.Section(
-                    body,
+                    f"-# Sent by {escape_md(round_data.requester_name)}",
                     accessory=discord.ui.Thumbnail(round_data.requester_avatar_url),
                 )
             )
         else:
-            container.add_item(discord.ui.TextDisplay(body))
+            container.add_item(discord.ui.TextDisplay(f"-# Sent by {escape_md(round_data.requester_name)}"))
+        container.add_item(discord.ui.TextDisplay(build_paranoia_dm_details(round_data, answered=answered)))
+        container.add_item(discord.ui.TextDisplay(hint_line))
         row = discord.ui.ActionRow()
         row.add_item(button)
         container.add_item(row)
-        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.large))
+        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
         container.add_item(discord.ui.TextDisplay(build_paranoia_footer_text(round_data, include_type=False)))
         self.add_item(container)
 
