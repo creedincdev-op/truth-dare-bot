@@ -936,31 +936,28 @@ def write_status(
     )
 
 
-def build_prompt_embed(prompt: PromptResult, requester_user: discord.abc.User | None) -> discord.Embed:
-    requester_name = None
-    requester_avatar = None
-    if requester_user is not None:
-        requester_name = getattr(requester_user, "global_name", None) or requester_user.name
-        requester_avatar = requester_user.display_avatar.url if requester_user.display_avatar else None
-
-    footer_parts: list[str] = []
-    if prompt.game in {"truth", "dare"}:
-        footer_parts.append(f"Type: {GAME_LABELS[prompt.game].upper()}")
-    footer_parts.append(f"Category: {titleize_category(prompt.category).upper()}")
-    footer_parts.append(f"Rating: {prompt.rating}")
-    footer_parts.append(f"ID: {prompt.id}")
-
-    embed = discord.Embed(title=prompt.text, color=GAME_COLORS.get(prompt.game, 0x5865F2))
-    embed.set_footer(text=" | ".join(footer_parts))
+def build_prompt_embed(
+    prompt: PromptResult,
+    *,
+    requester_name: str | None = None,
+    requester_avatar_url: str | None = None,
+) -> discord.Embed:
+    embed = discord.Embed(
+        description=f"**Truth OR Dare • {GAME_LABELS.get(prompt.game, prompt.game)}**",
+        color=GAME_COLORS.get(prompt.game, 0x5865F2),
+    )
+    embed.add_field(
+        name=escape_md(prompt.text),
+        value=f"*Rating-✨ {titleize_category(prompt.category)} • {prompt.rating}*",
+        inline=False,
+    )
+    embed.set_footer(text=f"ID {prompt.id} • {MADE_WITH_TAG}")
 
     if requester_name:
         embed.set_author(
-            name=f"{GAME_LABELS.get(prompt.game, prompt.game)} | Requested by {requester_name}",
-            icon_url=requester_avatar,
+            name=f"Requested by {escape_md(requester_name)}",
+            icon_url=requester_avatar_url or None,
         )
-
-    if prompt.game == "never_have_i_ever":
-        embed.description = "**Never Have I Ever**"
 
     return embed
 
@@ -1182,19 +1179,7 @@ async def apply_disable_toggle(interaction: discord.Interaction, scope: str, dis
     )
 
 
-def build_prompt_footer_text(prompt: PromptResult) -> str:
-    return f"-# ID {prompt.id} • {MADE_WITH_TAG}"
-
-
-def build_prompt_details_text(prompt: PromptResult, requester_name: str | None) -> str:
-    lines: list[str] = []
-    if requester_name:
-        lines.append(f"-# {GAME_LABELS.get(prompt.game, prompt.game)} | Requested by {escape_md(requester_name)}")
-    lines.append(f"-# ✨ {titleize_category(prompt.category)} • {prompt.rating}")
-    return "\n".join(lines)
-
-
-class PromptCardView(discord.ui.LayoutView):
+class PromptCardView(discord.ui.View):
     def __init__(
         self,
         prompt_engine: PromptEngine,
@@ -1210,20 +1195,9 @@ class PromptCardView(discord.ui.LayoutView):
         self.requester_name = requester_name
         self.requester_avatar_url = requester_avatar_url
 
-        actions = self._build_actions() if interactive else None
-        self.add_item(
-            build_paranoia_card_container(
-                eyebrow=f"Truth OR Dare • {GAME_LABELS.get(prompt.game, prompt.game)}",
-                headline=escape_md(prompt.text),
-                body=build_prompt_details_text(prompt, requester_name),
-                accent_color=GAME_COLORS.get(prompt.game, 0x5865F2),
-                footer=build_prompt_footer_text(prompt),
-                accessory_url=None,
-                actions=actions,
-                headline_prefix="####",
-                show_separator=True,
-            )
-        )
+        if interactive:
+            for action in self._build_actions():
+                self.add_item(action)
 
     def _build_actions(self) -> list[discord.ui.Button[Any]]:
         if self.prompt.game in {"truth", "dare"}:
@@ -1258,6 +1232,11 @@ class PromptCardView(discord.ui.LayoutView):
             if interaction.message is not None:
                 try:
                     await interaction.message.edit(
+                        embed=build_prompt_embed(
+                            self.prompt,
+                            requester_name=self.requester_name,
+                            requester_avatar_url=self.requester_avatar_url,
+                        ),
                         view=PromptCardView(
                             self.prompt_engine,
                             self.prompt,
@@ -1279,6 +1258,11 @@ class PromptCardView(discord.ui.LayoutView):
             next_requester_name = getattr(interaction.user, "global_name", None) or interaction.user.name
             next_requester_avatar = interaction.user.display_avatar.url if interaction.user.display_avatar else None
             await interaction.followup.send(
+                embed=build_prompt_embed(
+                    next_prompt,
+                    requester_name=next_requester_name,
+                    requester_avatar_url=next_requester_avatar,
+                ),
                 view=PromptCardView(
                     self.prompt_engine,
                     next_prompt,
@@ -1658,6 +1642,11 @@ async def send_game_prompt(interaction: discord.Interaction, game: str, rating: 
     requester_name = getattr(interaction.user, "global_name", None) or interaction.user.name
     requester_avatar = interaction.user.display_avatar.url if interaction.user.display_avatar else None
     await interaction.followup.send(
+        embed=build_prompt_embed(
+            prompt,
+            requester_name=requester_name,
+            requester_avatar_url=requester_avatar,
+        ),
         view=PromptCardView(
             bot.prompt_engine,
             prompt,
