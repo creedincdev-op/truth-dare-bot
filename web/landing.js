@@ -1,5 +1,8 @@
+const RUNTIME_CONFIG = window.TRUTH_OR_DARE_CONFIG || {};
+
 const DEFAULT_SITE_DATA = {
   brand: "Truth OR Dare",
+  companyName: "CreeD INC. </>",
   counts: {
     truth: 656,
     dare: 838,
@@ -9,7 +12,7 @@ const DEFAULT_SITE_DATA = {
   inviteUrl: null,
   supportUrl: "https://discord.gg/4fGf87kGhU",
   githubUrl: "https://github.com/creedincdev-op/truth-dare-bot",
-  clientId: null,
+  clientId: "1480626648163549375",
   commands: [
     {
       name: "/maxplay",
@@ -97,6 +100,11 @@ function mergeSiteData(base, extra) {
 }
 
 function apiBaseUrl() {
+  const configuredBase = String(RUNTIME_CONFIG.apiBase || "").trim().replace(/\/+$/, "");
+  if (configuredBase) {
+    return configuredBase;
+  }
+
   const meta = document.querySelector('meta[name="site-api-base"]');
   const value = (meta && meta.getAttribute("content")) || "";
   return value.trim().replace(/\/+$/, "");
@@ -129,6 +137,18 @@ function setText(id, value) {
   if (element) {
     element.textContent = value;
   }
+}
+
+function buildInviteUrl(clientId) {
+  const normalized = String(clientId || "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return (
+    "https://discord.com/oauth2/authorize"
+    + `?client_id=${encodeURIComponent(normalized)}&scope=bot%20applications.commands`
+  );
 }
 
 function formatNumber(value) {
@@ -332,10 +352,11 @@ function syncLinkGroup(role, options) {
   });
 }
 
-function syncInviteLinks(inviteUrl) {
-  if (inviteUrl) {
+function syncInviteLinks(inviteUrl, clientId) {
+  const resolvedInviteUrl = inviteUrl || buildInviteUrl(clientId || RUNTIME_CONFIG.clientId || DEFAULT_SITE_DATA.clientId);
+  if (resolvedInviteUrl) {
     syncLinkGroup("invite", {
-      activeUrl: inviteUrl,
+      activeUrl: resolvedInviteUrl,
       activeLabel: "Add to Discord",
       activeExternal: true,
     });
@@ -360,7 +381,7 @@ function syncInviteLinks(inviteUrl) {
 
 function syncSupportLinks(supportUrl) {
   syncLinkGroup("support", {
-    activeUrl: supportUrl || DEFAULT_SITE_DATA.supportUrl,
+    activeUrl: supportUrl || RUNTIME_CONFIG.supportUrl || DEFAULT_SITE_DATA.supportUrl,
     activeLabel: "Discord",
     activeExternal: true,
   });
@@ -368,7 +389,7 @@ function syncSupportLinks(supportUrl) {
 
 function syncGithubLinks(githubUrl) {
   syncLinkGroup("github", {
-    activeUrl: githubUrl || DEFAULT_SITE_DATA.githubUrl,
+    activeUrl: githubUrl || RUNTIME_CONFIG.githubUrl || DEFAULT_SITE_DATA.githubUrl,
     activeLabel: "GitHub",
     activeExternal: true,
   });
@@ -392,8 +413,17 @@ function syncHealthLinks() {
 }
 
 function syncFooterMeta(clientId) {
+  const companyName = String(RUNTIME_CONFIG.companyName || DEFAULT_SITE_DATA.companyName).trim();
   setText("footer-year", String(new Date().getFullYear()));
-  setText("footer-client-id", clientId ? `Client ID: ${clientId}` : "Client ID: set on deploy");
+  setText("footer-client-id", clientId ? `Client ID: ${clientId}` : `Client ID: ${RUNTIME_CONFIG.clientId || DEFAULT_SITE_DATA.clientId}`);
+
+  document.querySelectorAll(".footer-meta").forEach((element) => {
+    element.textContent = companyName;
+  });
+
+  document.querySelectorAll(".footer-bottom p:first-child").forEach((element) => {
+    element.innerHTML = `Copyright &copy; <span id="footer-year">${new Date().getFullYear()}</span> ${companyName.replace(/</g, "&lt;").replace(/>/g, "&gt;")}`;
+  });
 }
 
 function applySiteData(payload) {
@@ -406,7 +436,7 @@ function applySiteData(payload) {
   renderCommands(payload.commands);
   renderSamples(payload.samples);
   startRotation(payload.samples);
-  syncInviteLinks(payload.inviteUrl);
+  syncInviteLinks(payload.inviteUrl, payload.clientId);
   syncSupportLinks(payload.supportUrl);
   syncGithubLinks(payload.githubUrl);
   syncHealthLinks();

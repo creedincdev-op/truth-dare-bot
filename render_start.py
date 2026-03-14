@@ -42,10 +42,12 @@ PAGE_ROUTES = {
     "/license.html": WEB_DIR / "license.html",
 }
 ASSET_ROUTES = {
+    "/site-config.js": (WEB_DIR / "site-config.js", "application/javascript; charset=utf-8"),
     "/brand-logo.svg": (WEB_DIR / "brand-logo.svg", "image/svg+xml"),
     "/brand-banner.svg": (WEB_DIR / "brand-banner.svg", "image/svg+xml"),
     "/landing.css": (WEB_DIR / "landing.css", "text/css; charset=utf-8"),
     "/landing.js": (WEB_DIR / "landing.js", "application/javascript; charset=utf-8"),
+    "/assets/site-config.js": (WEB_DIR / "site-config.js", "application/javascript; charset=utf-8"),
     "/assets/brand-logo.svg": (WEB_DIR / "brand-logo.svg", "image/svg+xml"),
     "/assets/brand-banner.svg": (WEB_DIR / "brand-banner.svg", "image/svg+xml"),
     "/assets/landing.css": (WEB_DIR / "landing.css", "text/css; charset=utf-8"),
