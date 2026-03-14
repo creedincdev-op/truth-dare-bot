@@ -974,10 +974,12 @@ def build_prompt_rating_text(prompt: PromptResult, guild_id: int | None) -> str 
     return f"-# Rating - ✨ {titleize_category(prompt.category)} • {prompt.rating}"
 
 
-def build_prompt_requested_text(requester_name: str | None) -> str | None:
+def build_prompt_requested_text(requester_name: str | None, requester_id: int | None) -> str | None:
+    if requester_id is not None:
+        return f"-# ** 👤 || Requested by <@{requester_id}>**"
     if not requester_name:
         return None
-    return f"-# **| Requested by {escape_md(requester_name)}**"
+    return f"-# ** 👤 || Requested by {escape_md(requester_name)}**"
 
 
 def escape_md(value: str | None) -> str:
@@ -1205,6 +1207,7 @@ class PromptCardView(discord.ui.LayoutView):
         prompt: PromptResult,
         *,
         guild_id: int | None = None,
+        requester_id: int | None = None,
         requester_name: str | None = None,
         requester_avatar_url: str | None = None,
         interactive: bool = True,
@@ -1213,6 +1216,7 @@ class PromptCardView(discord.ui.LayoutView):
         self.prompt_engine = prompt_engine
         self.prompt = prompt
         self.guild_id = guild_id
+        self.requester_id = requester_id
         self.requester_name = requester_name
         self.requester_avatar_url = requester_avatar_url
 
@@ -1222,7 +1226,7 @@ class PromptCardView(discord.ui.LayoutView):
             discord.ui.TextDisplay(f"-# **Truth OR Dare • {GAME_LABELS.get(prompt.game, prompt.game)}**")
         )
         container.add_item(discord.ui.TextDisplay(f"**{escape_md(prompt.text)}**"))
-        requested_text = build_prompt_requested_text(requester_name)
+        requested_text = build_prompt_requested_text(requester_name, requester_id)
         if requested_text:
             container.add_item(discord.ui.TextDisplay(requested_text))
         rating_text = build_prompt_rating_text(prompt, guild_id)
@@ -1271,10 +1275,12 @@ class PromptCardView(discord.ui.LayoutView):
                 try:
                     await interaction.message.edit(
                         embeds=[],
+                        allowed_mentions=discord.AllowedMentions.none(),
                         view=PromptCardView(
                             self.prompt_engine,
                             self.prompt,
                             guild_id=self.guild_id,
+                            requester_id=self.requester_id,
                             requester_name=self.requester_name,
                             requester_avatar_url=self.requester_avatar_url,
                             interactive=False,
@@ -1293,10 +1299,12 @@ class PromptCardView(discord.ui.LayoutView):
             next_requester_name = getattr(interaction.user, "global_name", None) or interaction.user.name
             next_requester_avatar = interaction.user.display_avatar.url if interaction.user.display_avatar else None
             await interaction.followup.send(
+                allowed_mentions=discord.AllowedMentions.none(),
                 view=PromptCardView(
                     self.prompt_engine,
                     next_prompt,
                     guild_id=interaction.guild_id,
+                    requester_id=interaction.user.id,
                     requester_name=next_requester_name,
                     requester_avatar_url=next_requester_avatar,
                 )
@@ -1665,10 +1673,12 @@ async def send_game_prompt(interaction: discord.Interaction, game: str, rating: 
     requester_name = getattr(interaction.user, "global_name", None) or interaction.user.name
     requester_avatar = interaction.user.display_avatar.url if interaction.user.display_avatar else None
     await interaction.followup.send(
+        allowed_mentions=discord.AllowedMentions.none(),
         view=PromptCardView(
             bot.prompt_engine,
             prompt,
             guild_id=interaction.guild_id,
+            requester_id=interaction.user.id,
             requester_name=requester_name,
             requester_avatar_url=requester_avatar,
         )
