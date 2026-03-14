@@ -987,9 +987,8 @@ def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = Fal
     reveal_line = "Your answer was sent anonymously." if answered else "Your name stays out of the public reveal."
     return "\n\n".join(
         [
-            f"**\U0001f464 Sent by**\n{escape_md(round_data.requester_name)}",
-            f"**\U0001f517 Back to chat**\n[Open original channel]({build_paranoia_jump_url(round_data)})",
-            f"**\U0001f3ad Reveal style**\n{reveal_line}",
+            f"**👤 Sent by**\n{escape_md(round_data.requester_name)}",
+            f"**🎭 Reveal style**\n{reveal_line}",
         ]
     )
 
@@ -1366,24 +1365,30 @@ class ParanoiaAnswerView(discord.ui.LayoutView):
 
         body = "\n\n".join(
             [
-                "-# 🫣 Secret Paranoia Drop",
                 build_paranoia_dm_details(round_data, answered=answered),
                 "-# Reply once. Keep it funny, clean, and server-safe."
                 if not answered
                 else "-# Locked in. The public reveal already has your anonymous answer.",
             ]
         )
-        self.add_item(
-            build_paranoia_card_container(
-                eyebrow="Truth OR Dare • Paranoia",
-                headline=escape_md(round_data.prompt.text),
-                body=body,
-                accent_color=0x57F287 if answered else GAME_COLORS["paranoia"],
-                footer=build_paranoia_footer_text(round_data, include_type=False),
-                accessory_url=round_data.requester_avatar_url,
-                actions=[button],
+
+        container = discord.ui.Container(
+            accent_color=0x57F287 if answered else GAME_COLORS["paranoia"],
+        )
+        container.add_item(discord.ui.TextDisplay("### Truth OR Dare • Paranoia"))
+        container.add_item(
+            discord.ui.TextDisplay(
+                "## ✅ Answer locked in" if answered else "## 🤫 Secret Paranoia Drop"
             )
         )
+        container.add_item(discord.ui.TextDisplay(f"# {escape_md(round_data.prompt.text)}"))
+        container.add_item(discord.ui.TextDisplay(body))
+        row = discord.ui.ActionRow()
+        row.add_item(button)
+        container.add_item(row)
+        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.large))
+        container.add_item(discord.ui.TextDisplay(build_paranoia_footer_text(round_data, include_type=False)))
+        self.add_item(container)
 
     async def answer_callback(self, interaction: discord.Interaction) -> None:
         round_data = paranoia_rounds.get(self.round_id)
@@ -1725,6 +1730,7 @@ async def paranoia_command(
 
     try:
         dm_message = await target.send(
+            content=build_paranoia_jump_url(round_data),
             view=ParanoiaAnswerView(bot, round_id),
         )
     except discord.HTTPException:
