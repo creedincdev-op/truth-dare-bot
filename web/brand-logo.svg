@@ -1,0 +1,40 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ring" x1="88" y1="76" x2="410" y2="434" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#71F0FF"/>
+      <stop offset="0.5" stop-color="#D4FF45"/>
+      <stop offset="1" stop-color="#FF7A5C"/>
+    </linearGradient>
+    <linearGradient id="core" x1="130" y1="102" x2="378" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#13303A"/>
+      <stop offset="0.55" stop-color="#0A1A22"/>
+      <stop offset="1" stop-color="#060D12"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(186 156) rotate(48.619) scale(146 132)">
+      <stop stop-color="#71F0FF" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#71F0FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(336 330) rotate(135.58) scale(164 138)">
+      <stop stop-color="#FF7A5C" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#FF7A5C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="#050B10"/>
+  <circle cx="256" cy="256" r="212" fill="url(#ring)" opacity="0.16"/>
+  <circle cx="256" cy="256" r="204" fill="url(#core)" stroke="url(#ring)" stroke-width="10"/>
+  <circle cx="256" cy="256" r="182" fill="url(#glowA)"/>
+  <circle cx="256" cy="256" r="182" fill="url(#glowB)"/>
+
+  <path d="M118 154C151 138 191 126 242 122L246 150C201 154 166 164 138 182L118 154Z" fill="#D4FF45" opacity="0.9"/>
+  <path d="M376 344C343 360 305 371 252 374L248 346C294 342 329 331 356 314L376 344Z" fill="#FF7A5C" opacity="0.9"/>
+  <path d="M375 148C338 129 303 121 252 118L248 146C293 149 327 160 355 176L375 148Z" fill="#71F0FF" opacity="0.85"/>
+
+  <text x="256" y="194" text-anchor="middle" fill="#EEF7FF" font-family="Arial Black, Arial, sans-serif" font-size="72" letter-spacing="4">TRUTH</text>
+  <rect x="194" y="212" width="124" height="42" rx="21" fill="#FFD166"/>
+  <text x="256" y="241" text-anchor="middle" fill="#10232B" font-family="Arial Black, Arial, sans-serif" font-size="24" letter-spacing="3">OR</text>
+  <text x="256" y="316" text-anchor="middle" fill="#FF7A5C" font-family="Arial Black, Arial, sans-serif" font-size="76" letter-spacing="4">DARE</text>
+
+  <text x="256" y="372" text-anchor="middle" fill="#A9BBC0" font-family="Arial, Helvetica, sans-serif" font-size="18" letter-spacing="4">SAFE PLAY // BIG MOVES</text>
+  <text x="256" y="398" text-anchor="middle" fill="#71F0FF" font-family="Arial Black, Arial, sans-serif" font-size="20" letter-spacing="5">MAX UPGRADE</text>
+</svg>

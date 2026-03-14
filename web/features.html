@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Truth OR Dare | Features</title>
+  <meta name="description" content="Deeper feature breakdown for the Truth OR Dare Discord bot.">
+  <meta name="site-api-base" content="">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./landing.css">
+  <script defer src="./landing.js"></script>
+</head>
+<body class="subpage">
+  <div class="bg-layer bg-grid"></div>
+  <div class="bg-layer bg-glow bg-glow-a"></div>
+  <div class="bg-layer bg-glow bg-glow-b"></div>
+  <div class="bg-layer bg-glow bg-glow-c"></div>
+
+  <header class="site-header section-shell">
+    <a class="brand" href="./index.html">Truth OR Dare</a>
+    <nav class="site-nav" aria-label="Primary">
+      <a class="nav-link" href="./index.html">Home</a>
+      <a class="nav-link" aria-current="page" href="./features.html">Features</a>
+      <a class="nav-link" href="./docs.html">Docs</a>
+      <a class="nav-link" href="./faq.html">FAQ</a>
+      <a class="nav-link" href="./support.html">Support</a>
+    </nav>
+    <div class="header-badges">
+      <span class="header-pill">Feature Page</span>
+      <span class="header-pill status-pill status-pill--loading" id="status-pill">Checking live status</span>
+    </div>
+  </header>
+
+  <main class="page-main">
+    <section class="page-hero section-shell">
+      <div>
+        <p class="eyebrow">Feature page</p>
+        <h1>Everything behind the round.</h1>
+        <p class="lede">
+          The homepage sells the energy. This page explains the machine: prompt depth, repeat control,
+          optional AI refill, live health, admin setup, and why the flow stays quick once the room starts moving.
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" data-link-role="invite" data-fallback-label="Live Status" href="./docs.html">Add to Discord</a>
+          <a class="button button-secondary" href="./docs.html">Read Docs</a>
+        </div>
+      </div>
+
+      <article class="page-panel">
+        <span class="mini-label">Core stack</span>
+        <h2>Fast rounds with less admin friction.</h2>
+        <ul class="bullet-list">
+          <li>Local truth and dare pools give instant coverage before any AI request is needed.</li>
+          <li>Recent prompt history keeps individual channels from looping the same round energy.</li>
+          <li>Live health reporting exposes the actual bot state instead of hiding behind a static page.</li>
+          <li>Support, docs, and legal now live in their own pages so home stays focused.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="section-shell page-section">
+      <div class="section-heading">
+        <p class="eyebrow">Breakdown</p>
+        <h2>What the bot is doing under the hood.</h2>
+      </div>
+      <div class="detail-grid detail-grid--three">
+        <article class="detail-card">
+          <span class="feature-index">01</span>
+          <h3>Prompt depth first</h3>
+          <p>Large local pools make the bot feel loaded from the first invite instead of acting empty until external services are wired in.</p>
+        </article>
+        <article class="detail-card">
+          <span class="feature-index">02</span>
+          <h3>Recent-history shield</h3>
+          <p>Repeat control works per room so a busy server can keep playing without hearing the same recycled prompt too soon.</p>
+        </article>
+        <article class="detail-card">
+          <span class="feature-index">03</span>
+          <h3>Optional AI backup</h3>
+          <p>When enabled, AI behaves like a refill layer, not the whole product. The local pool remains the core experience.</p>
+        </article>
+        <article class="detail-card">
+          <span class="feature-index">04</span>
+          <h3>Live supervision</h3>
+          <p>The site reads actual runtime state so you can see boot, cooldown, reconnect, and ready signals instead of guessing.</p>
+        </article>
+        <article class="detail-card">
+          <span class="feature-index">05</span>
+          <h3>Button-first continuation</h3>
+          <p>Rounds stay moving after the initial command through quick actions that keep the room engaged.</p>
+        </article>
+        <article class="detail-card">
+          <span class="feature-index">06</span>
+          <h3>Safer public fit</h3>
+          <p>Guardrails keep the tone playful and sharp without turning the bot into unusable explicit spam.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section-shell page-section">
+      <div class="page-split">
+        <article class="detail-card detail-card--wide">
+          <span class="mini-label">For players</span>
+          <h3>The room feels faster.</h3>
+          <p>Users only need a command and a button. The rest of the experience is about pace, freshness, and a clear next move.</p>
+          <ul class="bullet-list">
+            <li>Low pause between rounds</li>
+            <li>Prompt rotation that feels varied</li>
+            <li>Support server available when something looks off</li>
+          </ul>
+        </article>
+        <article class="detail-card detail-card--wide">
+          <span class="mini-label">For admins</span>
+          <h3>The setup feels controllable.</h3>
+          <p>Admin-facing pages, command docs, and live runtime visibility make it easier to invite, test, and keep the bot healthy after launch.</p>
+          <ul class="bullet-list">
+            <li>Dedicated docs page for setup</li>
+            <li>Direct status path instead of guessing</li>
+            <li>Legal/support pages ready for public launch</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section-shell cta-shell">
+      <article class="cta-banner">
+        <div>
+          <p class="eyebrow">Next stop</p>
+          <h2>Need the actual commands and setup flow?</h2>
+          <p class="cta-copy">The docs page keeps the operational stuff out of the homepage and in a cleaner command deck.</p>
+        </div>
+        <div class="cta-actions">
+          <a class="button button-primary" href="./docs.html">Open Docs</a>
+          <a class="button button-secondary" href="./support.html">Support Page</a>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="site-footer section-shell">
+    <div class="footer-shell">
+      <div class="footer-brand">
+        <a class="footer-mark" href="./index.html">Truth OR Dare</a>
+        <p class="footer-meta">CREED INC. ./&gt;</p>
+        <p class="footer-motto">Safe Play. Big Moves. Max Upgrade.</p>
+        <div class="footer-actions">
+          <a class="footer-button" data-link-role="support" href="./support.html">Discord</a>
+          <a class="footer-button" data-link-role="github" href="https://github.com/creedincdev-op/truth-dare-bot">GitHub</a>
+          <a class="footer-button" data-link-role="invite" data-fallback-label="Live Status" href="./docs.html">Invite</a>
+        </div>
+      </div>
+      <div class="footer-column">
+        <p class="footer-title">Product</p>
+        <a class="footer-link" data-link-role="invite" data-fallback-label="Live Status" href="./docs.html">Add To Discord</a>
+        <a class="footer-link" href="./features.html">Feature Page</a>
+        <a class="footer-link" href="./docs.html">Documentation</a>
+      </div>
+      <div class="footer-column">
+        <p class="footer-title">Resources</p>
+        <a class="footer-link" href="./docs.html">Command Deck</a>
+        <a class="footer-link" href="./faq.html">FAQ</a>
+        <a class="footer-link" href="./support.html">Support Server</a>
+      </div>
+      <div class="footer-column">
+        <p class="footer-title">Legal</p>
+        <a class="footer-link" href="./license.html">License</a>
+        <a class="footer-link" href="./privacy.html">Privacy Policy</a>
+        <a class="footer-link" href="./terms.html">Terms &amp; Conditions</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>Copyright &copy; <span id="footer-year">2026</span> CREED INC. ./&gt;</p>
+      <p id="footer-client-id">Client ID: set on deploy</p>
+    </div>
+  </footer>
+</body>
+</html>

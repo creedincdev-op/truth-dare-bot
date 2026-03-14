@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Truth OR Dare | Docs</title>
+  <meta name="description" content="Command deck and setup guide for the Truth OR Dare Discord bot.">
+  <meta name="site-api-base" content="">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./landing.css">
+  <script defer src="./landing.js"></script>
+</head>
+<body class="subpage">
+  <div class="bg-layer bg-grid"></div>
+  <div class="bg-layer bg-glow bg-glow-a"></div>
+  <div class="bg-layer bg-glow bg-glow-b"></div>
+  <div class="bg-layer bg-glow bg-glow-c"></div>
+
+  <header class="site-header section-shell">
+    <a class="brand" href="./index.html">Truth OR Dare</a>
+    <nav class="site-nav" aria-label="Primary">
+      <a class="nav-link" href="./index.html">Home</a>
+      <a class="nav-link" href="./features.html">Features</a>
+      <a class="nav-link" aria-current="page" href="./docs.html">Docs</a>
+      <a class="nav-link" href="./faq.html">FAQ</a>
+      <a class="nav-link" href="./support.html">Support</a>
+    </nav>
+    <div class="header-badges">
+      <span class="header-pill">Documentation</span>
+      <span class="header-pill status-pill status-pill--loading" id="status-pill">Checking live status</span>
+    </div>
+  </header>
+
+  <main class="page-main">
+    <section class="page-hero section-shell">
+      <div>
+        <p class="eyebrow">Command deck</p>
+        <h1>Short commands. Quick rounds.</h1>
+        <p class="lede">
+          This page takes the setup and command detail off the homepage. Use it for onboarding,
+          server setup, button flow, and the operational stuff admins actually need.
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" data-link-role="invite" data-fallback-label="Live Status" href="./docs.html">Add to Discord</a>
+          <a class="button button-secondary" href="./support.html">Need Help?</a>
+        </div>
+      </div>
+
+      <article class="page-panel">
+        <span class="mini-label">Quick start</span>
+        <h2>Three fast moves.</h2>
+        <ul class="bullet-list">
+          <li>Invite the bot into your server.</li>
+          <li>Run <code>/maxplay</code> to start the first round.</li>
+          <li>Use the action buttons to keep the flow moving without retyping commands.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="section-shell page-section">
+      <div class="section-heading">
+        <p class="eyebrow">Game flow</p>
+        <h2>What a normal round looks like.</h2>
+      </div>
+      <div class="flow-grid">
+        <article class="flow-card">
+          <span class="flow-step">Step 1</span>
+          <h3>Invite and sync</h3>
+          <p>Add the bot, confirm the slash commands show up, and test in one room first.</p>
+        </article>
+        <article class="flow-card">
+          <span class="flow-step">Step 2</span>
+          <h3>Run <code>/maxplay</code></h3>
+          <p>Launch a random, truth, or dare round without extra setup friction.</p>
+        </article>
+        <article class="flow-card">
+          <span class="flow-step">Step 3</span>
+          <h3>Stay in motion</h3>
+          <p>Pick Truth, Take Dare, and Mix It keep the pace up once the chat warms up.</p>
+        </article>
+        <article class="flow-card">
+          <span class="flow-step">Step 4</span>
+          <h3>Adjust and monitor</h3>
+          <p>Use the rest of the deck to tune the server, schedule drops, and verify runtime health.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section-shell command-section">
+      <div class="section-heading">
+        <p class="eyebrow">Slash commands</p>
+        <h2>The current command family.</h2>
+      </div>
+      <div class="command-grid" id="command-grid">
+        <article class="command-card">
+          <span class="command-name">/maxplay</span>
+          <p>Launch the main game flow with a random, truth, or dare style round.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section-shell page-section">
+      <div class="section-heading">
+        <p class="eyebrow">Action buttons</p>
+        <h2>What people see after the first round starts.</h2>
+      </div>
+      <div class="detail-grid detail-grid--three">
+        <article class="detail-card">
+          <span class="mini-label">Pick Truth</span>
+          <h3>Stay in confession mode.</h3>
+          <p>Useful when the room wants more talk, more reactions, and less performance pressure.</p>
+        </article>
+        <article class="detail-card">
+          <span class="mini-label">Take Dare</span>
+          <h3>Push the energy up.</h3>
+          <p>Shift the round into faster, more performative chaos when the room is ready for it.</p>
+        </article>
+        <article class="detail-card">
+          <span class="mini-label">Mix It</span>
+          <h3>Let the bot decide.</h3>
+          <p>Good when the group wants variety and you do not want to over-manage each round.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section-shell cta-shell">
+      <article class="cta-banner">
+        <div>
+          <p class="eyebrow">Still stuck?</p>
+          <h2>Jump to support instead of hunting through the homepage.</h2>
+          <p class="cta-copy">Support server link, health checks, and GitHub access are separated cleanly now.</p>
+        </div>
+        <div class="cta-actions">
+          <a class="button button-primary" href="./support.html">Open Support</a>
+          <a class="button button-secondary" href="./faq.html">Read FAQ</a>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="site-footer section-shell">
+    <div class="footer-shell">
+      <div class="footer-brand">
+        <a class="footer-mark" href="./index.html">Truth OR Dare</a>
+        <p class="footer-meta">CREED INC. ./&gt;</p>
+        <p class="footer-motto">Safe Play. Big Moves. Max Upgrade.</p>
+        <div class="footer-actions">
+          <a class="footer-button" data-link-role="support" href="./support.html">Discord</a>
+          <a class="footer-button" data-link-role="github" href="https://github.com/creedincdev-op/truth-dare-bot">GitHub</a>
+          <a class="footer-button" data-link-role="invite" data-fallback-label="Live Status" href="./docs.html">Invite</a>
+        </div>
+      </div>
+      <div class="footer-column">
+        <p class="footer-title">Product</p>
+        <a class="footer-link" data-link-role="invite" data-fallback-label="Live Status" href="./docs.html">Add To Discord</a>
+        <a class="footer-link" href="./features.html">Feature Page</a>
+        <a class="footer-link" href="./docs.html">Documentation</a>
+      </div>
+      <div class="footer-column">
+        <p class="footer-title">Resources</p>
+        <a class="footer-link" href="./docs.html">Command Deck</a>
+        <a class="footer-link" href="./faq.html">FAQ</a>
+        <a class="footer-link" href="./support.html">Support Server</a>
+      </div>
+      <div class="footer-column">
+        <p class="footer-title">Legal</p>
+        <a class="footer-link" href="./license.html">License</a>
+        <a class="footer-link" href="./privacy.html">Privacy Policy</a>
+        <a class="footer-link" href="./terms.html">Terms &amp; Conditions</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>Copyright &copy; <span id="footer-year">2026</span> CREED INC. ./&gt;</p>
+      <p id="footer-client-id">Client ID: set on deploy</p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Truth OR Dare</title>
+  <meta name="description" content="Truth OR Dare for Discord with live status, anti-repeat rounds, support server access, and a cleaner multi-page site.">
+  <meta name="site-api-base" content="">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./landing.css">
+  <script defer src="./landing.js"></script>
+</head>
+<body>
+  <div class="bg-layer bg-grid"></div>
+  <div class="bg-layer bg-glow bg-glow-a"></div>
+  <div class="bg-layer bg-glow bg-glow-b"></div>
+  <div class="bg-layer bg-glow bg-glow-c"></div>
+
+  <header class="site-header section-shell">
+    <a class="brand" href="./index.html">Truth OR Dare</a>
+    <nav class="site-nav" aria-label="Primary">
+      <a class="nav-link" aria-current="page" href="./index.html">Home</a>
+      <a class="nav-link" href="./features.html">Features</a>
+      <a class="nav-link" href="./docs.html">Docs</a>
+      <a class="nav-link" href="./faq.html">FAQ</a>
+      <a class="nav-link" href="./support.html">Support</a>
+    </nav>
+    <div class="header-badges">
+      <span class="header-pill">Safe Play. Big Moves. Max Upgrade.</span>
+      <span class="header-pill status-pill status-pill--loading" id="status-pill">Checking live status</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero section-shell">
+      <div class="hero-copy">
+        <p class="eyebrow">Discord game bot for confessions, chaos, and instant rounds</p>
+        <h1>Truth OR Dare it is.</h1>
+        <p class="lede">
+          Built for your Truth OR Dare bot: fast rounds, real variety, channel-aware anti-repeat logic, one-tap buttons,
+          clean guardrails, and optional AI backup when the room wants something fresh.
+        </p>
+
+        <div class="hero-actions">
+          <a class="button button-primary" data-link-role="invite" data-fallback-label="Live Status" href="./docs.html">Add to Discord</a>
+          <a class="button button-secondary" href="./docs.html">See Commands</a>
+        </div>
+
+        <dl class="hero-stats">
+          <div class="stat-card">
+            <dt>Truths</dt>
+            <dd id="stat-truth">656</dd>
+          </div>
+          <div class="stat-card">
+            <dt>Dares</dt>
+            <dd id="stat-dare">838</dd>
+          </div>
+          <div class="stat-card">
+            <dt>Total prompts</dt>
+            <dd id="stat-total">1,494</dd>
+          </div>
+          <div class="stat-card">
+            <dt>Repeat shield</dt>
+            <dd id="stat-history">180</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="hero-stage">
+        <article class="spotlight-card">
+          <div class="spotlight-top">
+            <span class="spotlight-kicker">Live prompt feed</span>
+            <span class="spotlight-time" id="status-time">health feed</span>
+          </div>
+          <p class="stage-label">Now serving</p>
+          <p class="stage-type" id="stage-type">Truth</p>
+          <p class="stage-prompt" id="stage-prompt">
+            What is one confident thing that instantly gets your attention in a late-night conversation?
+          </p>
+
+          <div class="stage-metrics">
+            <div class="metric-card">
+              <span>Phase</span>
+              <strong id="runtime-phase">booting</strong>
+            </div>
+            <div class="metric-card">
+              <span>Bot user</span>
+              <strong id="runtime-user">waiting</strong>
+            </div>
+            <div class="metric-card">
+              <span>Uptime</span>
+              <strong id="runtime-uptime">0m</strong>
+            </div>
+          </div>
+
+          <p class="status-note" id="status-note">Open through the bot server to show live supervisor status here.</p>
+        </article>
+
+        <div class="stack-grid">
+          <article class="mini-panel mini-panel--lime">
+            <span class="mini-label">Round control</span>
+            <h2>Pick Truth. Take Dare. Mix It.</h2>
+            <p>No dead pause after the first message. Keep the game rolling with buttons.</p>
+          </article>
+          <article class="mini-panel mini-panel--coral">
+            <span class="mini-label">Freshness</span>
+            <h2>Channel-aware anti-repeat.</h2>
+            <p>The bot tracks recent history so your room does not loop the same energy.</p>
+          </article>
+          <article class="mini-panel mini-panel--aqua">
+            <span class="mini-label">Guardrails</span>
+            <h2>Clean, savage, usable.</h2>
+            <p>Prompt filtering keeps it playful without slipping into explicit nonsense.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="signal-strip section-shell" aria-label="Use cases">
+      <div class="chip-row" id="use-case-list">
+        <span class="signal-chip">Late-night voice chats</span>
+        <span class="signal-chip">Server icebreakers</span>
+        <span class="signal-chip">Chaotic friend groups</span>
+      </div>
+    </section>
+
+    <section class="section-shell feature-section" id="features">
+      <div class="section-heading">
+        <p class="eyebrow">Why this one lands harder</p>
+        <h2>Made for Discord rooms that need energy immediately.</h2>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature-card">
+          <span class="feature-index">01</span>
+          <h3>Massive local prompt stash</h3>
+          <p>Hundreds of truths and dares are already loaded, so the bot feels alive before AI ever matters.</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-index">02</span>
+          <h3>Optional AI refill</h3>
+          <p>If you plug in OpenAI, the bot can generate fresh prompts while still respecting recent round history.</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-index">03</span>
+          <h3>Live health visibility</h3>
+          <p>The homepage reads the supervisor state, so you can tell whether the bot is online, reconnecting, or cooling down.</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-index">04</span>
+          <h3>Fast slash-command flow</h3>
+          <p>Start with a command, continue with buttons, and keep the room moving without typing extra setup.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section-shell sample-section" id="samples">
+      <div class="section-heading">
+        <p class="eyebrow">Prompt wall</p>
+        <h2>Real samples from your bot.</h2>
+      </div>
+      <div class="sample-grid" id="sample-grid">
+        <article class="sample-card sample-card--truth">
+          <span class="sample-tag">Truth</span>
+          <p>What is one confident thing that instantly gets your attention in a late-night conversation?</p>
+        </article>
+        <article class="sample-card sample-card--dare">
+          <span class="sample-tag">Dare</span>
+          <p>Pretend you are a radio host and explain your worst weakness in 30 seconds.</p>
+        </article>
+        <article class="sample-card sample-card--truth">
+          <span class="sample-tag">Truth</span>
+          <p>Who is your athlete crush that is not the obvious answer?</p>
+        </article>
+        <article class="sample-card sample-card--dare">
+          <span class="sample-tag">Dare</span>
+          <p>Describe your vibe like a streaming-show title.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section-shell flow-section">
+      <div class="section-heading">
+        <p class="eyebrow">How it plays</p>
+        <h2>Fast enough for chaos, clean enough to reuse daily.</h2>
+      </div>
+
+      <div class="flow-grid">
+        <article class="flow-card">
+          <span class="flow-step">Step 1</span>
+          <h3>Run the command</h3>
+          <p>Use <code>/maxplay</code> and pick your mode.</p>
+        </article>
+        <article class="flow-card">
+          <span class="flow-step">Step 2</span>
+          <h3>Tap the panel</h3>
+          <p>Pick Truth, Take Dare, and Mix It buttons keep the round moving in one click.</p>
+        </article>
+        <article class="flow-card">
+          <span class="flow-step">Step 3</span>
+          <h3>Track the room</h3>
+          <p>The engine avoids recent repeats so the game stays fresh inside each channel.</p>
+        </article>
+        <article class="flow-card">
+          <span class="flow-step">Step 4</span>
+          <h3>Escalate when needed</h3>
+          <p>Support, docs, and FAQ now live on their own pages instead of crowding the front page.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section-shell command-section" id="commands">
+      <div class="section-heading">
+        <p class="eyebrow">Command deck</p>
+        <h2>Everything important is a short command or a single tap.</h2>
+      </div>
+      <div class="command-grid" id="command-grid">
+        <article class="command-card">
+          <span class="command-name">/maxplay</span>
+          <p>Launch the main game flow with a random, truth, or dare style round.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section-shell expand-section">
+      <div class="section-heading">
+        <p class="eyebrow">Keep the home page clean</p>
+        <h2>Push the deeper stuff into dedicated pages.</h2>
+      </div>
+      <div class="expand-grid">
+        <a class="expand-card" href="./features.html">
+          <span class="expand-kicker">Feature page</span>
+          <h3>See the full product layout.</h3>
+          <p>Deeper breakdowns for freshness, AI refill, scheduling, and live supervision.</p>
+        </a>
+        <a class="expand-card" href="./docs.html">
+          <span class="expand-kicker">Documentation</span>
+          <h3>Keep command help off the hero.</h3>
+          <p>Slash commands, quick start flow, buttons, and server setup live there now.</p>
+        </a>
+        <a class="expand-card" href="./faq.html">
+          <span class="expand-kicker">FAQ</span>
+          <h3>Handle the repeat questions once.</h3>
+          <p>Invite, AI, anti-repeat, safety, and uptime answers in one place.</p>
+        </a>
+        <a class="expand-card" href="./support.html">
+          <span class="expand-kicker">Support</span>
+          <h3>Give people a place to go next.</h3>
+          <p>Support server, status path, GitHub repo, and issue guidance without cluttering home.</p>
+        </a>
+      </div>
+    </section>
+
+    <section class="section-shell cta-shell">
+      <article class="cta-banner">
+        <div>
+          <p class="eyebrow">Deploy the louder version</p>
+          <h2>Your bot already works. Now the website has room to grow.</h2>
+          <p class="cta-copy">Invite it, point people to support, and let the homepage stay sharp while the deeper pages do the heavy lifting.</p>
+        </div>
+        <div class="cta-actions">
+          <a class="button button-primary" data-link-role="invite" data-fallback-label="Live Status" href="./docs.html">Add to Discord</a>
+          <a class="button button-secondary" href="./support.html">Support Server</a>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="site-footer section-shell">
+    <div class="footer-shell">
+      <div class="footer-brand">
+        <a class="footer-mark" href="./index.html">Truth OR Dare</a>
+        <p class="footer-meta">CREED INC. ./&gt;</p>
+        <p class="footer-motto">Safe Play. Big Moves. Max Upgrade.</p>
+        <div class="footer-actions">
+          <a class="footer-button" data-link-role="support" href="./support.html">Discord</a>
+          <a class="footer-button" data-link-role="github" href="https://github.com/creedincdev-op/truth-dare-bot">GitHub</a>
+          <a class="footer-button" data-link-role="invite" data-fallback-label="Live Status" href="./docs.html">Invite</a>
+        </div>
+      </div>
+
+      <div class="footer-column">
+        <p class="footer-title">Product</p>
+        <a class="footer-link" data-link-role="invite" data-fallback-label="Live Status" href="./docs.html">Add To Discord</a>
+        <a class="footer-link" href="./features.html">Feature Page</a>
+        <a class="footer-link" href="./docs.html">Documentation</a>
+      </div>
+
+      <div class="footer-column">
+        <p class="footer-title">Resources</p>
+        <a class="footer-link" href="./docs.html">Command Deck</a>
+        <a class="footer-link" href="./faq.html">FAQ</a>
+        <a class="footer-link" href="./support.html">Support Server</a>
+      </div>
+
+      <div class="footer-column">
+        <p class="footer-title">Legal</p>
+        <a class="footer-link" href="./license.html">License</a>
+        <a class="footer-link" href="./privacy.html">Privacy Policy</a>
+        <a class="footer-link" href="./terms.html">Terms &amp; Conditions</a>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>Copyright &copy; <span id="footer-year">2026</span> CREED INC. ./&gt;</p>
+      <p id="footer-client-id">Client ID: set on deploy</p>
+    </div>
+  </footer>
+</body>
+</html>
