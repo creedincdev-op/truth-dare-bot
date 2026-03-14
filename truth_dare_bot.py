@@ -1076,7 +1076,7 @@ def build_paranoia_card_view(
 def build_paranoia_launch_view(round_data: ParanoiaRound, *, answered: bool = False) -> discord.ui.LayoutView:
     if answered:
         return build_paranoia_card_view(
-            eyebrow="Truth OR Dare \u2022 Paranoia",
+            eyebrow="**Truth OR Dare \u2022 Paranoia**",
             headline="\u2705 Anonymous answer received",
             body="The reveal just landed below.",
             accent_color=0x57F287,
@@ -1084,10 +1084,10 @@ def build_paranoia_launch_view(round_data: ParanoiaRound, *, answered: bool = Fa
         )
 
     return build_paranoia_card_view(
-        eyebrow="Truth OR Dare \u2022 Paranoia",
+        eyebrow="**Truth OR Dare \u2022 Paranoia**",
         headline="\U0001f92b Secret question delivered",
         body=(
-            "Someone got a private Paranoia question.\n\n"
+            "**Someone got a private Paranoia question.**\n\n"
             "The anonymous answer will appear here once they reply."
         ),
         accent_color=GAME_COLORS["paranoia"],
