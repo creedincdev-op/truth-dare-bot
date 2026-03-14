@@ -34,6 +34,7 @@ SETTINGS_FILE = DATA_DIR / "bot_settings.json"
 AI_CACHE_FILE = DATA_DIR / "ai_prompt_cache.json"
 
 RATINGS = ["PG", "PG13", "R"]
+MADE_WITH_TAG = "Made with \u2615\ufe0f and \U0001f9e0 By Yuvraj"
 GAME_LABELS = {
     "truth_or_dare": "Truth or Dare",
     "truth": "Truth",
@@ -978,7 +979,7 @@ def build_paranoia_footer_text(round_data: ParanoiaRound, *, include_type: bool 
         parts.append("PARANOIA")
     parts.append(f"Rating {round_data.prompt.rating}")
     parts.append(f"ID {round_data.prompt.id}")
-    parts.append("\u2615\ufe0f\u2764\ufe0f by yuvraj")
+    parts.append(MADE_WITH_TAG)
     return f"-# {' \u2022 '.join(parts)}"
 
 
@@ -988,7 +989,7 @@ def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = Fal
         [
             f"**\U0001f464 Sent by**\n{escape_md(round_data.requester_name)}",
             f"**\U0001f517 Back to chat**\n[Open original channel]({build_paranoia_jump_url(round_data)})",
-            f"**\U0001fae5 Reveal style**\n{reveal_line}",
+            f"**\U0001f3ad Reveal style**\n{reveal_line}",
         ]
     )
 
@@ -1001,7 +1002,7 @@ def build_paranoia_card_container(
     accent_color: int,
     footer: str,
     accessory_url: str | None = None,
-    button: discord.ui.Button[Any] | None = None,
+    actions: list[discord.ui.Button[Any]] | None = None,
 ) -> discord.ui.Container:
     container = discord.ui.Container(accent_color=accent_color)
     container.add_item(discord.ui.TextDisplay(f"-# {eyebrow}"))
@@ -1012,9 +1013,10 @@ def build_paranoia_card_container(
     else:
         container.add_item(discord.ui.TextDisplay(body))
 
-    if button is not None:
+    if actions:
         row = discord.ui.ActionRow()
-        row.add_item(button)
+        for action in actions:
+            row.add_item(action)
         container.add_item(row)
 
     container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.large))
@@ -1030,7 +1032,7 @@ def build_paranoia_card_view(
     accent_color: int,
     footer: str,
     accessory_url: str | None = None,
-    button: discord.ui.Button[Any] | None = None,
+    actions: list[discord.ui.Button[Any]] | None = None,
     timeout: float | None = None,
 ) -> discord.ui.LayoutView:
     view = discord.ui.LayoutView(timeout=timeout)
@@ -1041,7 +1043,7 @@ def build_paranoia_card_view(
         accent_color=accent_color,
         footer=footer,
         accessory_url=accessory_url,
-        button=button,
+        actions=actions,
     )
     view.add_item(container)
     return view
@@ -1054,18 +1056,18 @@ def build_paranoia_launch_view(round_data: ParanoiaRound, *, answered: bool = Fa
             headline="\u2705 Anonymous answer received",
             body="The reveal just landed below.",
             accent_color=0x57F287,
-            footer="-# Anonymous mode stayed clean \u2022 \u2615\ufe0f\u2764\ufe0f by yuvraj",
+            footer=f"-# Anonymous mode stayed clean \u2022 {MADE_WITH_TAG}",
         )
 
     return build_paranoia_card_view(
         eyebrow="Truth OR Dare \u2022 Paranoia",
-        headline="\U0001fae5 Secret question delivered",
+        headline="\U0001f92b Secret question delivered",
         body=(
             "Someone got a private Paranoia question.\n\n"
             "The anonymous answer will appear here once they reply."
         ),
         accent_color=GAME_COLORS["paranoia"],
-        footer="-# No requester or answerer is shown here \u2022 \u2615\ufe0f\u2764\ufe0f by yuvraj",
+        footer=f"-# No requester or answerer is shown here \u2022 {MADE_WITH_TAG}",
     )
 
 
@@ -1174,22 +1176,72 @@ async def apply_disable_toggle(interaction: discord.Interaction, scope: str, dis
     )
 
 
-class PromptButtonsView(discord.ui.View):
-    def __init__(self, prompt_engine: PromptEngine, prompt: PromptResult) -> None:
-        super().__init__(timeout=240)
+def build_prompt_footer_text(prompt: PromptResult) -> str:
+    return f"-# ID {prompt.id} • {MADE_WITH_TAG}"
+
+
+def build_prompt_details_text(prompt: PromptResult, requester_name: str | None) -> str:
+    lines: list[str] = []
+    if requester_name:
+        lines.append(f"**👤 Requested by**\n{escape_md(requester_name)}")
+    lines.append(f"**✨ Details**\n{titleize_category(prompt.category)} • {prompt.rating}")
+    return "\n\n".join(lines)
+
+
+class PromptCardView(discord.ui.LayoutView):
+    def __init__(
+        self,
+        prompt_engine: PromptEngine,
+        prompt: PromptResult,
+        *,
+        requester_name: str | None = None,
+        requester_avatar_url: str | None = None,
+        interactive: bool = True,
+    ) -> None:
+        super().__init__(timeout=240 if interactive else None)
         self.prompt_engine = prompt_engine
         self.prompt = prompt
+        self.requester_name = requester_name
+        self.requester_avatar_url = requester_avatar_url
 
-        if prompt.game in {"truth", "dare"}:
-            self.add_item(self._build_prompt_button("Truth", discord.ButtonStyle.success, "truth", prompt.rating))
-            self.add_item(self._build_prompt_button("Dare", discord.ButtonStyle.danger, "dare", prompt.rating))
-            self.add_item(self._build_prompt_button("Random", discord.ButtonStyle.primary, "truth_or_dare", prompt.rating))
-        elif prompt.game == "never_have_i_ever":
-            self.add_item(self._build_prompt_button("Next Never Have I Ever", discord.ButtonStyle.primary, "never_have_i_ever", prompt.rating))
-            self.add_item(self._build_prompt_button("Any Rating", discord.ButtonStyle.success, "never_have_i_ever", None))
+        actions = self._build_actions() if interactive else None
+        self.add_item(
+            build_paranoia_card_container(
+                eyebrow=f"Truth OR Dare • {GAME_LABELS.get(prompt.game, prompt.game)}",
+                headline=escape_md(prompt.text),
+                body=build_prompt_details_text(prompt, requester_name),
+                accent_color=GAME_COLORS.get(prompt.game, 0x5865F2),
+                footer=build_prompt_footer_text(prompt),
+                accessory_url=requester_avatar_url,
+                actions=actions,
+            )
+        )
 
-    def _build_prompt_button(self, label: str, style: discord.ButtonStyle, game: str, rating: str | None) -> discord.ui.Button:
-        button = discord.ui.Button(label=label, style=style)
+    def _build_actions(self) -> list[discord.ui.Button[Any]]:
+        if self.prompt.game in {"truth", "dare"}:
+            return [
+                self._build_prompt_button("Truth", "🟢", discord.ButtonStyle.success, "truth", self.prompt.rating),
+                self._build_prompt_button("Dare", "🔴", discord.ButtonStyle.danger, "dare", self.prompt.rating),
+                self._build_prompt_button("Random", "🎲", discord.ButtonStyle.primary, "truth_or_dare", self.prompt.rating),
+            ]
+
+        if self.prompt.game == "never_have_i_ever":
+            return [
+                self._build_prompt_button("Next", "🌀", discord.ButtonStyle.primary, "never_have_i_ever", self.prompt.rating),
+                self._build_prompt_button("Any Rating", "🎲", discord.ButtonStyle.success, "never_have_i_ever", None),
+            ]
+
+        return []
+
+    def _build_prompt_button(
+        self,
+        label: str,
+        emoji: str,
+        style: discord.ButtonStyle,
+        game: str,
+        rating: str | None,
+    ) -> discord.ui.Button[Any]:
+        button = discord.ui.Button(label=label, emoji=emoji, style=style)
 
         async def callback(interaction: discord.Interaction) -> None:
             if not await check_button_enabled(interaction):
@@ -1197,19 +1249,34 @@ class PromptButtonsView(discord.ui.View):
             await interaction.response.defer()
             if interaction.message is not None:
                 try:
-                    await interaction.message.edit(view=None)
+                    await interaction.message.edit(
+                        view=PromptCardView(
+                            self.prompt_engine,
+                            self.prompt,
+                            requester_name=self.requester_name,
+                            requester_avatar_url=self.requester_avatar_url,
+                            interactive=False,
+                        )
+                    )
                 except discord.HTTPException:
                     pass
 
             next_prompt = await self.prompt_engine.get_next_prompt(
                 requested_game=game,
                 channel_id=interaction.channel_id or 0,
+                guild_id=interaction.guild_id,
                 requester_tag=str(interaction.user),
                 rating=rating,
             )
+            next_requester_name = getattr(interaction.user, "global_name", None) or interaction.user.name
+            next_requester_avatar = interaction.user.display_avatar.url if interaction.user.display_avatar else None
             await interaction.followup.send(
-                embed=build_prompt_embed(next_prompt, interaction.user),
-                view=PromptButtonsView(self.prompt_engine, next_prompt),
+                view=PromptCardView(
+                    self.prompt_engine,
+                    next_prompt,
+                    requester_name=next_requester_name,
+                    requester_avatar_url=next_requester_avatar,
+                )
             )
 
         button.callback = callback
@@ -1262,7 +1329,7 @@ class ParanoiaAnswerModal(discord.ui.Modal, title="Anonymous Answer"):
         if round_data.ack_message_id:
             try:
                 ack_message = await channel.fetch_message(round_data.ack_message_id)
-                await ack_message.edit(view=build_paranoia_launch_view(round_data, answered=True))
+                await ack_message.delete()
             except discord.HTTPException:
                 pass
 
@@ -1314,7 +1381,7 @@ class ParanoiaAnswerView(discord.ui.LayoutView):
                 accent_color=0x57F287 if answered else GAME_COLORS["paranoia"],
                 footer=build_paranoia_footer_text(round_data, include_type=False),
                 accessory_url=round_data.requester_avatar_url,
-                button=button,
+                actions=[button],
             )
         )
 
@@ -1566,9 +1633,15 @@ async def send_game_prompt(interaction: discord.Interaction, game: str, rating: 
         requester_tag=str(interaction.user),
         rating=rating,
     )
+    requester_name = getattr(interaction.user, "global_name", None) or interaction.user.name
+    requester_avatar = interaction.user.display_avatar.url if interaction.user.display_avatar else None
     await interaction.followup.send(
-        embed=build_prompt_embed(prompt, interaction.user),
-        view=PromptButtonsView(bot.prompt_engine, prompt),
+        view=PromptCardView(
+            bot.prompt_engine,
+            prompt,
+            requester_name=requester_name,
+            requester_avatar_url=requester_avatar,
+        )
     )
 
 
