@@ -3,6 +3,7 @@ import os
 import random
 import re
 import secrets
+import string
 import time
 import asyncio
 from dataclasses import dataclass, field
@@ -34,7 +35,21 @@ SETTINGS_FILE = DATA_DIR / "bot_settings.json"
 AI_CACHE_FILE = DATA_DIR / "ai_prompt_cache.json"
 
 RATINGS = ["PG", "PG13", "R"]
-MADE_WITH_TAG = "Made with \u2615\ufe0f and \U0001f9e0 By Yuvraj"
+COFFEE_EMOJI = "\u2615\ufe0f"
+BRAIN_EMOJI = "\U0001F9E0"
+MADE_WITH_TAG = f"Made with {COFFEE_EMOJI} and {BRAIN_EMOJI} By Yuvraj"
+BRANDED_GUILD_IDS = {
+    573159553143930892,
+    1418476529368825989,
+    1438127108919398422,
+}
+DISPLAY_ID_PREFIXES = {
+    "truth": "truth",
+    "dare": "dare",
+    "never_have_i_ever": "nhie",
+    "paranoia": "para",
+    "truth_or_dare": "tod",
+}
 GAME_LABELS = {
     "truth_or_dare": "Truth or Dare",
     "truth": "Truth",
@@ -221,7 +236,18 @@ def build_prompt_key(game: str, category: str, rating: str, text: str) -> str:
 
 
 def short_id(prefix: str = "tod") -> str:
-    return f"{prefix}_{secrets.token_urlsafe(6)}"
+    clean_prefix = DISPLAY_ID_PREFIXES.get(prefix, prefix)
+    alphabet = string.ascii_uppercase + string.digits
+    token = "".join(secrets.choice(alphabet) for _ in range(6))
+    return f"{clean_prefix}-{token}"
+
+
+def should_show_branding(guild_id: int | None) -> bool:
+    return guild_id in BRANDED_GUILD_IDS if guild_id is not None else False
+
+
+def maybe_brand_suffix(guild_id: int | None) -> str:
+    return f" • {MADE_WITH_TAG}" if should_show_branding(guild_id) else ""
 
 
 def load_runtime_settings() -> RuntimeSettings:
@@ -936,8 +962,8 @@ def write_status(
     )
 
 
-def build_prompt_footer_text(prompt: PromptResult) -> str:
-    return f"-# ID {prompt.id} • {MADE_WITH_TAG}"
+def build_prompt_footer_text(prompt: PromptResult, guild_id: int | None) -> str:
+    return f"-# ID {prompt.id}{maybe_brand_suffix(guild_id)}"
 
 
 def build_prompt_requested_text(requester_name: str | None) -> str | None:
@@ -960,8 +986,9 @@ def build_paranoia_footer_text(round_data: ParanoiaRound, *, include_type: bool 
         parts.append("PARANOIA")
     parts.append(f"Rating {round_data.prompt.rating}")
     parts.append(f"ID {round_data.prompt.id}")
-    parts.append(MADE_WITH_TAG)
-    return f"-# {' \u2022 '.join(parts)}"
+    if should_show_branding(round_data.guild_id):
+        parts.append(MADE_WITH_TAG)
+    return f"-# {' • '.join(parts)}"
 
 
 def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = False) -> str:
@@ -1043,7 +1070,7 @@ def build_paranoia_launch_view(round_data: ParanoiaRound, *, answered: bool = Fa
             headline="\u2705 Anonymous answer received",
             body="The reveal just landed below.",
             accent_color=0x57F287,
-            footer=f"-# Anonymous mode stayed clean \u2022 {MADE_WITH_TAG}",
+            footer=f"-# Anonymous mode stayed clean{maybe_brand_suffix(round_data.guild_id)}",
         )
 
     return build_paranoia_card_view(
@@ -1054,7 +1081,7 @@ def build_paranoia_launch_view(round_data: ParanoiaRound, *, answered: bool = Fa
             "The anonymous answer will appear here once they reply."
         ),
         accent_color=GAME_COLORS["paranoia"],
-        footer=f"-# No requester or answerer is shown here \u2022 {MADE_WITH_TAG}",
+        footer=f"-# No requester or answerer is shown here{maybe_brand_suffix(round_data.guild_id)}",
     )
 
 
@@ -1169,6 +1196,7 @@ class PromptCardView(discord.ui.LayoutView):
         prompt_engine: PromptEngine,
         prompt: PromptResult,
         *,
+        guild_id: int | None = None,
         requester_name: str | None = None,
         requester_avatar_url: str | None = None,
         interactive: bool = True,
@@ -1176,6 +1204,7 @@ class PromptCardView(discord.ui.LayoutView):
         super().__init__(timeout=240 if interactive else None)
         self.prompt_engine = prompt_engine
         self.prompt = prompt
+        self.guild_id = guild_id
         self.requester_name = requester_name
         self.requester_avatar_url = requester_avatar_url
 
@@ -1197,7 +1226,7 @@ class PromptCardView(discord.ui.LayoutView):
                 row.add_item(action)
             container.add_item(row)
         container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-        container.add_item(discord.ui.TextDisplay(build_prompt_footer_text(prompt)))
+        container.add_item(discord.ui.TextDisplay(build_prompt_footer_text(prompt, guild_id)))
         self.add_item(container)
 
     def _build_actions(self) -> list[discord.ui.Button[Any]]:
@@ -1237,6 +1266,7 @@ class PromptCardView(discord.ui.LayoutView):
                         view=PromptCardView(
                             self.prompt_engine,
                             self.prompt,
+                            guild_id=self.guild_id,
                             requester_name=self.requester_name,
                             requester_avatar_url=self.requester_avatar_url,
                             interactive=False,
@@ -1258,6 +1288,7 @@ class PromptCardView(discord.ui.LayoutView):
                 view=PromptCardView(
                     self.prompt_engine,
                     next_prompt,
+                    guild_id=interaction.guild_id,
                     requester_name=next_requester_name,
                     requester_avatar_url=next_requester_avatar,
                 )
@@ -1629,6 +1660,7 @@ async def send_game_prompt(interaction: discord.Interaction, game: str, rating: 
         view=PromptCardView(
             bot.prompt_engine,
             prompt,
+            guild_id=interaction.guild_id,
             requester_name=requester_name,
             requester_avatar_url=requester_avatar,
         )
