@@ -30,6 +30,8 @@ PAGE_ROUTES = {
     "/features.html": WEB_DIR / "features.html",
     "/docs": WEB_DIR / "docs.html",
     "/docs.html": WEB_DIR / "docs.html",
+    "/developer": WEB_DIR / "developer.html",
+    "/developer.html": WEB_DIR / "developer.html",
     "/faq": WEB_DIR / "faq.html",
     "/faq.html": WEB_DIR / "faq.html",
     "/support": WEB_DIR / "support.html",

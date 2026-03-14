@@ -3,6 +3,8 @@ const RUNTIME_CONFIG = window.TRUTH_OR_DARE_CONFIG || {};
 const DEFAULT_SITE_DATA = {
   brand: "Truth OR Dare",
   companyName: "CreeD INC. </>",
+  developerName: "YUVRAJ",
+  developerDiscordId: "1240237445841420302",
   counts: {
     truth: 656,
     dare: 838,
@@ -136,6 +138,13 @@ function setText(id, value) {
   const element = document.getElementById(id);
   if (element) {
     element.textContent = value;
+  }
+}
+
+function setHtml(id, value) {
+  const element = document.getElementById(id);
+  if (element) {
+    element.innerHTML = value;
   }
 }
 
@@ -414,8 +423,12 @@ function syncHealthLinks() {
 
 function syncFooterMeta(clientId) {
   const companyName = String(RUNTIME_CONFIG.companyName || DEFAULT_SITE_DATA.companyName).trim();
+  const developerName = String(RUNTIME_CONFIG.developerName || DEFAULT_SITE_DATA.developerName).trim();
   setText("footer-year", String(new Date().getFullYear()));
   setText("footer-client-id", clientId ? `Client ID: ${clientId}` : `Client ID: ${RUNTIME_CONFIG.clientId || DEFAULT_SITE_DATA.clientId}`);
+  document.querySelectorAll(".footer-maker").forEach((element) => {
+    element.textContent = `Made by ${developerName} </>`;
+  });
 
   document.querySelectorAll(".footer-meta").forEach((element) => {
     element.textContent = companyName;
@@ -423,6 +436,50 @@ function syncFooterMeta(clientId) {
 
   document.querySelectorAll(".footer-bottom p:first-child").forEach((element) => {
     element.innerHTML = `Copyright &copy; <span id="footer-year">${new Date().getFullYear()}</span> ${companyName.replace(/</g, "&lt;").replace(/>/g, "&gt;")}`;
+  });
+}
+
+function syncDeveloperProfile() {
+  const developerName = String(RUNTIME_CONFIG.developerName || DEFAULT_SITE_DATA.developerName).trim();
+  const developerDiscordId = String(RUNTIME_CONFIG.developerDiscordId || DEFAULT_SITE_DATA.developerDiscordId).trim();
+
+  setText("developer-name", `${developerName} </>`);
+  setText("developer-discord-id", developerDiscordId);
+  setText("developer-inline-id", developerDiscordId);
+  setText("developer-short-id", developerDiscordId.slice(-6));
+  setHtml("developer-id-code", `Discord ID // <strong>${developerDiscordId}</strong>`);
+}
+
+function initRevealMotion() {
+  const elements = document.querySelectorAll(
+    ".spotlight-card, .mini-panel, .feature-card, .sample-card, .flow-card, .command-card, "
+    + ".expand-card, .detail-card, .page-panel, .faq-item, .cta-banner, .vision-card, .developer-card, .developer-micro"
+  );
+
+  if (!elements.length) {
+    return;
+  }
+
+  if (!("IntersectionObserver" in window)) {
+    elements.forEach((element) => element.classList.add("is-visible"));
+    return;
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) {
+        return;
+      }
+
+      entry.target.classList.add("is-visible");
+      observer.unobserve(entry.target);
+    });
+  }, { threshold: 0.16 });
+
+  elements.forEach((element, index) => {
+    element.classList.add("reveal-item");
+    element.style.setProperty("--reveal-delay", `${Math.min(index * 45, 280)}ms`);
+    observer.observe(element);
   });
 }
 
@@ -441,6 +498,7 @@ function applySiteData(payload) {
   syncGithubLinks(payload.githubUrl);
   syncHealthLinks();
   syncFooterMeta(payload.clientId);
+  syncDeveloperProfile();
   updateStatus(payload.status);
 }
 
@@ -486,6 +544,8 @@ async function refreshStatus() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   await loadSiteData();
+  syncDeveloperProfile();
+  initRevealMotion();
 
   if (state.apiAvailable) {
     window.setInterval(refreshStatus, 15000);
