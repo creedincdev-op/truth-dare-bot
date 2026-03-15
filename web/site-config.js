@@ -1,6 +1,6 @@
 window.TRUTH_OR_DARE_CONFIG = {
   // Set this to your live Render backend URL when you have it.
-  apiBase: "",
+  apiBase: "https://truth-dare-bot-sbxh.onrender.com",
   companyName: "CreeD INC. </>",
   clientId: "1480626648163549375",
   developerName: "! YUVRAJJ </> PIXELATED",
