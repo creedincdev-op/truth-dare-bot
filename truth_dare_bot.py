@@ -1011,8 +1011,8 @@ def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = Fal
     return "\n".join(
         [
             "-# 🔗 From",
-            f"<#{round_data.channel_id}>",
-            f"** 👤 || Sent by {escape_md(round_data.requester_name)}**",
+            f"<#{round_data.channel_id}>  ** 👤 || Sent by {escape_md(round_data.requester_name)}**",
+            "",
             "**🎭 Reveal style**",
             f"**{reveal_line}**",
             hint_line,
