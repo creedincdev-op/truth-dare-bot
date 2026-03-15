@@ -518,7 +518,9 @@ function applyDeveloperProfile(profile) {
     return;
   }
 
-  const displayName = String(profile.displayName || profile.username || RUNTIME_CONFIG.developerName || DEFAULT_SITE_DATA.developerName).trim();
+  const displayName = String(
+    RUNTIME_CONFIG.developerName || profile.displayName || profile.username || DEFAULT_SITE_DATA.developerName
+  ).trim();
   const username = String(profile.username || displayName).trim();
   const userId = String(profile.id || RUNTIME_CONFIG.developerDiscordId || DEFAULT_SITE_DATA.developerDiscordId).trim();
   const avatarUrl = String(profile.avatarUrl || "").trim();
