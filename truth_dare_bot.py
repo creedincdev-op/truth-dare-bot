@@ -1012,8 +1012,8 @@ def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = Fal
         [
             "-# 🔗 From",
             f"<#{round_data.channel_id}>",
-            f"** 👤 || Sent by {escape_md(round_data.requester_name)}**",
-            "**-# 🎭 Reveal style**",
+            f"** 👤 || Sent by {escape_md(round_data.requester_name)}**  ",
+            "**-# 🎭 Reveal style**  ",
             f"**{reveal_line}**",
             hint_line,
         ]
@@ -1411,7 +1411,7 @@ class ParanoiaAnswerView(discord.ui.LayoutView):
         container.add_item(
             discord.ui.TextDisplay(
                 "**Truth OR Dare • Paranoia**\n"
-                + ("**## ✅ Answer locked in**" if answered else "**## 🤫 Secret Paranoia Drop**")
+                + ("**## ✅ Answer locked in**  " if answered else "**## 🤫 Secret Paranoia Drop**  ")
                 + f"\n## {escape_md(round_data.prompt.text)}\n"
                 + build_paranoia_dm_details(round_data, answered=answered)
             )
