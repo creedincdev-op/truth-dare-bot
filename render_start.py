@@ -86,6 +86,21 @@ def read_int_env(name: str, fallback: int, minimum: int = 0) -> int:
     return max(minimum, value)
 
 
+def coerce_state_number(payload: dict[str, object], keys: tuple[str, ...], fallback: int | float, caster) -> int | float:
+    raw_value = fallback
+    for key in keys:
+        if key in payload:
+            raw_value = payload.get(key, fallback)
+            break
+
+    try:
+        value = caster(raw_value)
+    except (TypeError, ValueError):
+        value = caster(fallback)
+
+    return value
+
+
 def load_runtime_state(initial_backoff_seconds: int) -> dict[str, float | int]:
     if not STATE_FILE.exists():
         return {
@@ -99,10 +114,18 @@ def load_runtime_state(initial_backoff_seconds: int) -> dict[str, float | int]:
     except (OSError, json.JSONDecodeError):
         payload = {}
 
+    backoff_seconds = int(
+        coerce_state_number(payload, ("backoff_seconds", "backoffSeconds"), initial_backoff_seconds, int)
+    )
+    rapid_failures = int(coerce_state_number(payload, ("rapid_failures", "rapidFailures"), 0, int))
+    next_start_after = float(
+        coerce_state_number(payload, ("next_start_after", "nextStartAfter"), 0.0, float)
+    )
+
     return {
-        "backoff_seconds": max(initial_backoff_seconds, int(payload.get("backoff_seconds", initial_backoff_seconds))),
-        "rapid_failures": max(0, int(payload.get("rapid_failures", 0))),
-        "next_start_after": max(0.0, float(payload.get("next_start_after", 0.0))),
+        "backoff_seconds": max(initial_backoff_seconds, backoff_seconds),
+        "rapid_failures": max(0, rapid_failures),
+        "next_start_after": max(0.0, next_start_after),
     }
 
 
@@ -410,8 +433,9 @@ class HealthHandler(BaseHTTPRequestHandler):
 
     def _handle(self, include_body: bool) -> None:
         request_path = urlparse(self.path).path
+        api_path = request_path[4:] if request_path.startswith("/api/") else request_path
 
-        if request_path in ("/healthz", "/ping"):
+        if api_path in ("/healthz", "/ping"):
             self._send_json(
                 {
                     "ok": True,
@@ -422,11 +446,11 @@ class HealthHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if request_path == "/site-data":
+        if api_path == "/site-data":
             self._send_json(build_site_payload(self.supervisor_state), include_body=include_body)
             return
 
-        if request_path == "/developer-profile":
+        if api_path == "/developer-profile":
             self._send_json(fetch_developer_profile(), include_body=include_body)
             return
 
@@ -439,7 +463,7 @@ class HealthHandler(BaseHTTPRequestHandler):
             self._serve_asset(asset_path, content_type, include_body)
             return
 
-        if request_path in ("/health", "/readyz"):
+        if api_path in ("/health", "/readyz"):
             payload = read_bot_status(self.supervisor_state)
             status_code = 200 if payload.get("discordReady") else 503
             self._send_json(payload, status_code=status_code, include_body=include_body)
@@ -479,19 +503,7 @@ def run_health_server(port: int, supervisor_state: dict[str, object]) -> Threadi
 
 
 def main() -> int:
-    if not BOT_ENTRY.exists():
-        raise RuntimeError(f"Bot entry file not found: {BOT_ENTRY}")
-
-    if not os.getenv("BOT_TOKEN") and read_env("DISCORD_TOKEN"):
-        os.environ["BOT_TOKEN"] = read_env("DISCORD_TOKEN")
-
     port = read_int_env("PORT", 10000, 1)
-    initial_backoff_seconds = read_int_env("BOT_RESTART_BACKOFF_INITIAL", 900, 60)
-    max_backoff_seconds = read_int_env("BOT_RESTART_BACKOFF_MAX", 7200, initial_backoff_seconds)
-    rapid_exit_threshold_seconds = read_int_env("BOT_RAPID_EXIT_SECONDS", 180, 30)
-    startup_jitter_max_seconds = read_int_env("BOT_STARTUP_JITTER_MAX", 45, 0)
-    runtime_state = load_runtime_state(initial_backoff_seconds)
-
     supervisor_state: dict[str, object] = {
         "stop": False,
         "proc": None,
@@ -502,6 +514,7 @@ def main() -> int:
         "reconnect_at": None,
     }
     server = run_health_server(port, supervisor_state)
+    print(f"Health server listening on port {port}.", flush=True)
 
     def shutdown_handler(signum, frame) -> None:
         supervisor_state["stop"] = True
@@ -516,6 +529,34 @@ def main() -> int:
 
     signal.signal(signal.SIGTERM, shutdown_handler)
     signal.signal(signal.SIGINT, shutdown_handler)
+
+    if not BOT_ENTRY.exists():
+        supervisor_state["phase"] = "bootstrap_error"
+        supervisor_state["last_error"] = f"Bot entry file not found: {BOT_ENTRY}"
+        print(supervisor_state["last_error"], file=sys.stderr, flush=True)
+        while not supervisor_state["stop"]:
+            sleep_with_stop(supervisor_state, 30)
+        server.shutdown()
+        return 1
+
+    if not os.getenv("BOT_TOKEN") and read_env("DISCORD_TOKEN"):
+        os.environ["BOT_TOKEN"] = read_env("DISCORD_TOKEN")
+
+    initial_backoff_seconds = read_int_env("BOT_RESTART_BACKOFF_INITIAL", 900, 60)
+    max_backoff_seconds = read_int_env("BOT_RESTART_BACKOFF_MAX", 7200, initial_backoff_seconds)
+    rapid_exit_threshold_seconds = read_int_env("BOT_RAPID_EXIT_SECONDS", 180, 30)
+    startup_jitter_max_seconds = read_int_env("BOT_STARTUP_JITTER_MAX", 45, 0)
+
+    try:
+        runtime_state = load_runtime_state(initial_backoff_seconds)
+    except Exception as exc:
+        runtime_state = {
+            "backoff_seconds": initial_backoff_seconds,
+            "rapid_failures": 0,
+            "next_start_after": 0.0,
+        }
+        supervisor_state["last_error"] = f"Failed to read runtime state: {exc}"
+        print(supervisor_state["last_error"], file=sys.stderr, flush=True)
 
     if startup_jitter_max_seconds > 0:
         initial_delay = random.randint(0, startup_jitter_max_seconds)

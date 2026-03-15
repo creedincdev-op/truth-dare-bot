@@ -105,6 +105,9 @@ function mergeSiteData(base, extra) {
 function apiBaseUrl() {
   const configuredBase = String(RUNTIME_CONFIG.apiBase || "").trim().replace(/\/+$/, "");
   if (configuredBase) {
+    if (configuredBase.startsWith("/") && !isHttpContext()) {
+      return "";
+    }
     return configuredBase;
   }
 
@@ -473,7 +476,7 @@ function syncDeveloperProfile() {
 
   const avatar = document.getElementById("developer-avatar");
   if (avatar) {
-    avatar.setAttribute("src", fallbackAvatarDataUri(developerName));
+    avatar.setAttribute("src", RUNTIME_CONFIG.developerAvatarUrl || fallbackAvatarDataUri(developerName));
     avatar.setAttribute("alt", `${developerName} Discord profile picture`);
   }
 }
@@ -487,6 +490,7 @@ function applyDeveloperProfile(profile) {
   const username = String(profile.username || displayName).trim();
   const userId = String(profile.id || RUNTIME_CONFIG.developerDiscordId || DEFAULT_SITE_DATA.developerDiscordId).trim();
   const avatarUrl = String(profile.avatarUrl || "").trim();
+  const resolvedAvatarUrl = avatarUrl || RUNTIME_CONFIG.developerAvatarUrl || fallbackAvatarDataUri(displayName);
 
   setText("developer-name", displayName);
   setText("developer-discord-id", userId);
@@ -496,7 +500,7 @@ function applyDeveloperProfile(profile) {
 
   const avatar = document.getElementById("developer-avatar");
   if (avatar) {
-    avatar.setAttribute("src", avatarUrl || fallbackAvatarDataUri(displayName));
+    avatar.setAttribute("src", resolvedAvatarUrl);
     avatar.setAttribute("alt", `${displayName} Discord profile picture`);
   }
 }
