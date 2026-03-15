@@ -3,7 +3,8 @@ const RUNTIME_CONFIG = window.TRUTH_OR_DARE_CONFIG || {};
 const DEFAULT_SITE_DATA = {
   brand: "Truth OR Dare",
   companyName: "CreeD INC. </>",
-  developerName: "YUVRAJ",
+  developerName: "! YUVRAJJ </> PIXELATED",
+  developerCreditName: "YUVRAJ",
   developerDiscordId: "1240237445841420302",
   counts: {
     truth: 656,
@@ -441,11 +442,13 @@ function syncHealthLinks() {
 
 function syncFooterMeta(clientId) {
   const companyName = String(RUNTIME_CONFIG.companyName || DEFAULT_SITE_DATA.companyName).trim();
-  const developerName = String(RUNTIME_CONFIG.developerName || DEFAULT_SITE_DATA.developerName).trim();
+  const developerCreditName = String(
+    RUNTIME_CONFIG.developerCreditName || DEFAULT_SITE_DATA.developerCreditName || DEFAULT_SITE_DATA.developerName
+  ).trim();
   setText("footer-year", String(new Date().getFullYear()));
   setText("footer-client-id", clientId ? `Client ID: ${clientId}` : `Client ID: ${RUNTIME_CONFIG.clientId || DEFAULT_SITE_DATA.clientId}`);
   document.querySelectorAll(".footer-maker").forEach((element) => {
-    element.textContent = `Made by ${developerName} </>`;
+    element.textContent = `Made by ${developerCreditName} </>`;
   });
 
   document.querySelectorAll(".footer-meta").forEach((element) => {
@@ -461,12 +464,12 @@ function syncDeveloperProfile() {
   const developerName = String(RUNTIME_CONFIG.developerName || DEFAULT_SITE_DATA.developerName).trim();
   const developerDiscordId = String(RUNTIME_CONFIG.developerDiscordId || DEFAULT_SITE_DATA.developerDiscordId).trim();
 
-  setText("developer-name", `${developerName} </>`);
+  setText("developer-name", developerName);
   setText("developer-discord-id", developerDiscordId);
   setText("developer-inline-id", developerDiscordId);
   setText("developer-short-id", developerDiscordId.slice(-6));
   setHtml("developer-id-code", `Discord ID // <strong>${developerDiscordId}</strong>`);
-  setText("developer-username", `@${developerName.toLowerCase()}`);
+  setText("developer-username", developerName);
 
   const avatar = document.getElementById("developer-avatar");
   if (avatar) {
@@ -485,10 +488,10 @@ function applyDeveloperProfile(profile) {
   const userId = String(profile.id || RUNTIME_CONFIG.developerDiscordId || DEFAULT_SITE_DATA.developerDiscordId).trim();
   const avatarUrl = String(profile.avatarUrl || "").trim();
 
-  setText("developer-name", `${displayName} </>`);
+  setText("developer-name", displayName);
   setText("developer-discord-id", userId);
   setText("developer-short-id", userId.slice(-6));
-  setText("developer-username", `@${username}`);
+  setText("developer-username", username || displayName);
   setHtml("developer-id-code", `Discord ID // <strong>${userId}</strong>`);
 
   const avatar = document.getElementById("developer-avatar");
@@ -505,7 +508,7 @@ async function loadDeveloperProfile() {
 
   applyDeveloperProfile({
     id: RUNTIME_CONFIG.developerDiscordId || DEFAULT_SITE_DATA.developerDiscordId,
-    username: String(RUNTIME_CONFIG.developerName || DEFAULT_SITE_DATA.developerName).toLowerCase(),
+    username: String(RUNTIME_CONFIG.developerName || DEFAULT_SITE_DATA.developerName),
     displayName: RUNTIME_CONFIG.developerName || DEFAULT_SITE_DATA.developerName,
     avatarUrl: "",
   });
