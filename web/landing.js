@@ -601,6 +601,36 @@ function initRevealMotion() {
   });
 }
 
+function initInteractiveCards() {
+  const cards = document.querySelectorAll(
+    ".spotlight-card, .mini-panel, .feature-card, .sample-card, .flow-card, .command-card, "
+    + ".expand-card, .detail-card, .page-panel, .faq-item, .cta-banner, .vision-card, .developer-card, .developer-micro"
+  );
+
+  cards.forEach((card) => {
+    card.classList.add("interactive-card");
+
+    card.addEventListener("pointermove", (event) => {
+      if (event.pointerType === "touch") {
+        return;
+      }
+
+      const rect = card.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * 100;
+      const y = ((event.clientY - rect.top) / rect.height) * 100;
+      card.style.setProperty("--pointer-x", `${x}%`);
+      card.style.setProperty("--pointer-y", `${y}%`);
+      card.classList.add("is-hovering");
+    });
+
+    card.addEventListener("pointerleave", () => {
+      card.classList.remove("is-hovering");
+      card.style.removeProperty("--pointer-x");
+      card.style.removeProperty("--pointer-y");
+    });
+  });
+}
+
 function applySiteData(payload) {
   setText("stat-truth", formatNumber(payload.counts && payload.counts.truth));
   setText("stat-dare", formatNumber(payload.counts && payload.counts.dare));
@@ -665,6 +695,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadSiteData();
   syncDeveloperProfile();
   initRevealMotion();
+  initInteractiveCards();
   await loadDeveloperProfile();
 
   if (state.apiAvailable) {

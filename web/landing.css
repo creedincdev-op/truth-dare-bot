@@ -19,7 +19,7 @@
 
 html {
   scroll-behavior: smooth;
-  font-size: clamp(16px, 0.28vw + 13px, 19px);
+  font-size: clamp(16px, 0.42vw + 12px, 21px);
 }
 
 body {
@@ -92,7 +92,7 @@ code {
 }
 
 .section-shell {
-  width: min(1560px, calc(100vw - clamp(1.25rem, 3vw, 3.5rem)));
+  width: min(1720px, calc(100vw - clamp(1rem, 2.4vw, 3rem)));
   margin: 0 auto;
 }
 
@@ -121,10 +121,23 @@ code {
 
 .brand {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.72rem;
   font-family: "Archivo Black", sans-serif;
-  font-size: clamp(1rem, 1.8vw, 1.3rem);
+  font-size: clamp(1.18rem, 1vw + 0.95rem, 1.7rem);
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.brand::after {
+  content: "CreeD INC. </>";
+  color: var(--muted);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.48em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: none;
 }
 
 .site-nav,
@@ -175,7 +188,8 @@ code {
   color: var(--text);
   border-color: rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.06);
-  transform: translateY(-1px);
+  transform: translateY(-2px) scale(1.015);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
 }
 
 .status-pill::before {
@@ -327,7 +341,7 @@ h1 {
 .page-split,
 .footer-shell {
   display: grid;
-  gap: 1rem;
+  gap: clamp(1rem, 1.3vw, 1.4rem);
 }
 
 .hero-stats,
@@ -361,6 +375,34 @@ h1 {
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
   transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease, background 220ms ease;
+}
+
+.interactive-card {
+  isolation: isolate;
+}
+
+.interactive-card > * {
+  position: relative;
+  z-index: 2;
+}
+
+.interactive-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    280px circle at var(--pointer-x, 50%) var(--pointer-y, 50%),
+    rgba(113, 240, 255, 0.16),
+    transparent 58%
+  );
+  transition: opacity 180ms ease;
+}
+
+.interactive-card.is-hovering::before {
+  opacity: 1;
 }
 
 .stat-card {
@@ -423,6 +465,7 @@ h1 {
   border-radius: 999px;
   background: linear-gradient(90deg, var(--lime), var(--aqua));
   transition: width 220ms ease, filter 220ms ease;
+  z-index: 1;
 }
 
 .spotlight-top {
@@ -525,7 +568,7 @@ h1 {
 .cta-shell,
 .expand-section,
 .page-section {
-  padding: 3.4rem 0 0;
+  padding: 4.4rem 0 0;
 }
 
 .feature-grid,
@@ -759,12 +802,13 @@ h1 {
 
 .footer-maker {
   margin: 0;
-  color: var(--aqua);
+  color: #8cff54;
   font-family: "Press Start 2P", sans-serif;
-  font-size: clamp(0.62rem, 1vw, 0.76rem);
+  font-size: clamp(0.56rem, 0.78vw, 0.68rem);
+  font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1.7;
-  text-shadow: 0 0 0.9rem rgba(113, 240, 255, 0.32);
+  text-shadow: 0 0 0.8rem rgba(140, 255, 84, 0.22);
 }
 
 .vision-grid {
@@ -990,10 +1034,18 @@ h1 {
   filter: saturate(1.2);
 }
 
+.button-primary:hover {
+  box-shadow: 0 18px 34px rgba(212, 255, 69, 0.18);
+}
+
+.button-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 @media (min-width: 1480px) {
   .hero,
   .page-hero {
-    grid-template-columns: minmax(0, 1.04fr) minmax(440px, 0.96fr);
+    grid-template-columns: minmax(0, 1.06fr) minmax(520px, 0.94fr);
   }
 }
 
@@ -1015,13 +1067,24 @@ h1 {
   font-size: 0.92rem;
 }
 
+.footer-bottom > p:first-child {
+  margin-right: auto;
+}
+
 .footer-bottom-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.75rem;
-  margin-left: auto;
   flex-wrap: wrap;
+  order: 2;
+}
+
+#footer-client-id {
+  order: 3;
+  margin-left: 0.35rem;
+  text-align: right;
+  white-space: nowrap;
 }
 
 @media (max-width: 1180px) {
@@ -1096,6 +1159,16 @@ h1 {
     width: 100%;
   }
 
+  .brand {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.18rem;
+  }
+
+  .brand::after {
+    font-size: 0.44em;
+  }
+
   .hero,
   .page-hero {
     padding-top: 2rem;
@@ -1118,5 +1191,17 @@ h1 {
   .header-badges {
     margin-left: 0;
     justify-content: flex-start;
+  }
+
+  .footer-bottom {
+    align-items: flex-start;
+  }
+
+  .footer-bottom-actions,
+  #footer-client-id {
+    order: initial;
+    margin-left: 0;
+    text-align: left;
+    white-space: normal;
   }
 }
