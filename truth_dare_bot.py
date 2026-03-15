@@ -1931,7 +1931,7 @@ class ControlHelpCard(AutoHideControlCard):
         container.add_item(discord.ui.TextDisplay(f"## {title}"))
         container.add_item(discord.ui.TextDisplay(description))
         container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
-        command_lines = "\n".join(f"-# `{name}` — {desc}" for name, desc in commands_list)
+        command_lines = "\n".join(f"-# **{name}** — {desc}" for name, desc in commands_list)
         container.add_item(discord.ui.TextDisplay(f"**Commands**\n{command_lines}"))
         note_lines = "\n".join(f"-# {note}" for note in notes)
         container.add_item(discord.ui.TextDisplay(f"**Notes**\n{note_lines}"))
@@ -1945,14 +1945,14 @@ def build_admin_help_view(owner_id: int) -> ControlHelpCard:
     return ControlHelpCard(
         owner_id,
         title="Admin controls",
-        description="Hidden admin controls for this server. These auto-hide unless you tap Keep.",
+        description="Hidden admin controls for Truth OR Dare bot commands in this server. These auto-hide unless you tap Keep.",
         commands_list=[
             ("<adminhelp", "Show this admin help panel."),
             ("<adminstatus", "Show current admin/developer disable state."),
-            ("<disableall channel", "Disable the bot in this channel."),
-            ("<disableall server", "Disable the bot in this server."),
-            ("<enableall channel", "Re-enable this channel unless a developer lock exists."),
-            ("<enableall server", "Re-enable this server unless a developer lock exists."),
+            ("<disableall channel", "Disable Truth OR Dare bot commands in this channel."),
+            ("<disableall server", "Disable Truth OR Dare bot commands in this server."),
+            ("<enableall channel", "Re-enable Truth OR Dare bot commands in this channel unless a developer lock exists."),
+            ("<enableall server", "Re-enable Truth OR Dare bot commands in this server unless a developer lock exists."),
             ("<clearhistory channel", "Reset repeat memory for this channel."),
             ("<clearhistory server", "Reset repeat memory for this server."),
         ],
@@ -1968,14 +1968,14 @@ def build_dev_help_view(owner_id: int) -> ControlHelpCard:
     return ControlHelpCard(
         owner_id,
         title="Developer controls",
-        description="Hidden developer runtime controls. These auto-hide unless you tap Keep.",
+        description="Hidden developer controls for Truth OR Dare bot commands and runtime. These auto-hide unless you tap Keep.",
         commands_list=[
             ("<<devhelp", "Show this developer help panel."),
             ("<<devstatus", "Show admin/developer disable state."),
-            ("<<disableall channel", "Developer-lock this channel."),
-            ("<<disableall server", "Developer-lock this server."),
-            ("<<enableall channel", "Remove the developer lock from this channel."),
-            ("<<enableall server", "Remove the developer lock from this server."),
+            ("<<disableall channel", "Developer-lock Truth OR Dare bot commands in this channel."),
+            ("<<disableall server", "Developer-lock Truth OR Dare bot commands in this server."),
+            ("<<enableall channel", "Remove the developer lock from Truth OR Dare bot commands in this channel."),
+            ("<<enableall server", "Remove the developer lock from Truth OR Dare bot commands in this server."),
             ("<<reloadprompts", "Reload prompt packs from disk."),
             ("<<clearhistory channel", "Reset repeat memory for this channel."),
             ("<<clearhistory server", "Reset repeat memory for this server."),
