@@ -3,6 +3,7 @@ import os
 import random
 import re
 import secrets
+import sqlite3
 import string
 import time
 import asyncio
@@ -33,6 +34,7 @@ PROMPT_POOL_FILE = DATA_DIR / "prompt_pools.json"
 STATUS_FILE = DATA_DIR / "runtime_status.json"
 SETTINGS_FILE = DATA_DIR / "bot_settings.json"
 AI_CACHE_FILE = DATA_DIR / "ai_prompt_cache.json"
+REPEAT_DB_FILE = DATA_DIR / "repeat_store.sqlite3"
 
 RATINGS = ["PG", "PG13", "R"]
 COFFEE_EMOJI = "\u2615"
@@ -52,6 +54,7 @@ DISPLAY_ID_PREFIXES = {
     "paranoia": "para",
     "truth_or_dare": "tod",
 }
+CORE_GAMES = ("truth", "dare", "never_have_i_ever", "paranoia")
 GAME_LABELS = {
     "truth_or_dare": "Truth or Dare",
     "truth": "Truth",
@@ -80,6 +83,60 @@ AI_PARANOIA_REFRESH_SECONDS = max(300, int(os.getenv("AI_PARANOIA_REFRESH_SECOND
 AI_PARANOIA_BATCH_SIZE = max(3, int(os.getenv("AI_PARANOIA_BATCH_SIZE", "6")))
 AI_PARANOIA_CACHE_TARGET = max(AI_PARANOIA_BATCH_SIZE, int(os.getenv("AI_PARANOIA_CACHE_TARGET", "18")))
 CONTROL_REPLY_TTL_SECONDS = max(8, int(os.getenv("CONTROL_REPLY_TTL_SECONDS", "20")))
+AI_CACHE_TARGETS = {
+    "truth": 120,
+    "dare": 160,
+    "never_have_i_ever": 80,
+    "paranoia": 120,
+}
+AI_BATCH_SIZES = {
+    "truth": 12,
+    "dare": 12,
+    "never_have_i_ever": 8,
+    "paranoia": 8,
+}
+AI_GAME_SPECS: dict[str, dict[str, tuple[str, ...] | str]] = {
+    "truth": {
+        "categories": ("relatable", "social", "bold", "flirty"),
+        "tones": ("relatable", "social", "bold", "flirty"),
+        "headline": "Generate Discord truth prompts",
+        "focus": (
+            "Confessions, embarrassing habits, hidden opinions, social behavior, comfort-zone admissions, "
+            "and playful but clean risky honesty for active Discord servers."
+        ),
+        "starter_rule": "Most prompts should start with What, Who, Which, Would, or When.",
+    },
+    "dare": {
+        "categories": ("camera", "social", "voice", "bold", "chaos"),
+        "tones": ("camera", "social", "voice", "bold", "chaos"),
+        "headline": "Generate Discord dare prompts",
+        "focus": (
+            "Photo dares, camera roll dares, object dares, voice-note dares, caption dares, status/story dares, "
+            "server interaction dares, and playful action dares that are easy to do in chat."
+        ),
+        "starter_rule": "Each prompt should be an actionable command that sounds instantly playable.",
+    },
+    "never_have_i_ever": {
+        "categories": ("relatable", "social", "bold", "flirty"),
+        "tones": ("relatable", "social", "bold", "flirty"),
+        "headline": "Generate Discord Never Have I Ever prompts",
+        "focus": (
+            "Relatable online behavior, awkward shared moments, chat habits, reaction habits, lurking, overthinking, "
+            "and playful admissions that fit Discord server friend groups."
+        ),
+        "starter_rule": "Every prompt must start with 'Never have I ever'.",
+    },
+    "paranoia": {
+        "categories": ("social", "bold", "flirty"),
+        "tones": ("social", "bold", "flirty"),
+        "headline": "Generate Discord paranoia prompts",
+        "focus": (
+            "Server energy, member list behavior, lurking, reactions, screenshots, voice chat, timing, chat vibes, "
+            "and playful 'who here' style questions that feel crazy but clean."
+        ),
+        "starter_rule": "Most prompts should start with 'Who here' or 'Whose'.",
+    },
+}
 BLOCKED_AI_TERMS = {
     "politics",
     "religion",
@@ -341,6 +398,142 @@ def should_show_paranoia_sender(settings: RuntimeSettings, guild_id: int | None)
     if guild_id in settings.paranoia_hide_sender_guilds:
         return False
     return True
+
+
+class RepeatStore:
+    def __init__(self, db_path: Path) -> None:
+        ensure_storage()
+        self.db_path = db_path
+        self.connection = sqlite3.connect(db_path)
+        self.connection.row_factory = sqlite3.Row
+        self.connection.execute("PRAGMA journal_mode=WAL")
+        self.connection.execute("PRAGMA synchronous=NORMAL")
+        self._init_schema()
+
+    def _init_schema(self) -> None:
+        self.connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS consumer_seen (
+                consumer_user_id INTEGER NOT NULL,
+                game TEXT NOT NULL,
+                prompt_key TEXT NOT NULL,
+                first_seen_at REAL NOT NULL,
+                last_seen_at REAL NOT NULL,
+                seen_count INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (consumer_user_id, game, prompt_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS guild_seen (
+                guild_id INTEGER NOT NULL,
+                game TEXT NOT NULL,
+                rating TEXT NOT NULL,
+                prompt_key TEXT NOT NULL,
+                first_seen_at REAL NOT NULL,
+                last_seen_at REAL NOT NULL,
+                seen_count INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (guild_id, game, rating, prompt_key)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_consumer_seen_game ON consumer_seen (consumer_user_id, game);
+            CREATE INDEX IF NOT EXISTS idx_guild_seen_game_rating ON guild_seen (guild_id, game, rating);
+            """
+        )
+        self.connection.commit()
+
+    def get_consumer_seen(self, consumer_user_id: int | None, game: str) -> dict[str, tuple[float, int]]:
+        if consumer_user_id is None:
+            return {}
+        rows = self.connection.execute(
+            """
+            SELECT prompt_key, last_seen_at, seen_count
+            FROM consumer_seen
+            WHERE consumer_user_id = ? AND game = ?
+            """,
+            (consumer_user_id, game),
+        ).fetchall()
+        return {
+            str(row["prompt_key"]): (float(row["last_seen_at"]), int(row["seen_count"]))
+            for row in rows
+        }
+
+    def get_guild_seen(self, guild_id: int | None, game: str) -> dict[str, tuple[float, int]]:
+        if guild_id is None:
+            return {}
+        rows = self.connection.execute(
+            """
+            SELECT prompt_key, MAX(last_seen_at) AS last_seen_at, SUM(seen_count) AS seen_count
+            FROM guild_seen
+            WHERE guild_id = ? AND game = ?
+            GROUP BY prompt_key
+            """,
+            (guild_id, game),
+        ).fetchall()
+        return {
+            str(row["prompt_key"]): (float(row["last_seen_at"]), int(row["seen_count"]))
+            for row in rows
+        }
+
+    def record_prompt(self, *, consumer_user_id: int | None, guild_id: int | None, prompt: PromptEntry) -> None:
+        now_ts = time.time()
+        with self.connection:
+            if consumer_user_id is not None:
+                self.connection.execute(
+                    """
+                    INSERT INTO consumer_seen (
+                        consumer_user_id, game, prompt_key, first_seen_at, last_seen_at, seen_count
+                    )
+                    VALUES (?, ?, ?, ?, ?, 1)
+                    ON CONFLICT(consumer_user_id, game, prompt_key)
+                    DO UPDATE SET
+                        last_seen_at = excluded.last_seen_at,
+                        seen_count = consumer_seen.seen_count + 1
+                    """,
+                    (consumer_user_id, prompt.game, prompt.key, now_ts, now_ts),
+                )
+
+            if guild_id is not None:
+                self.connection.execute(
+                    """
+                    INSERT INTO guild_seen (
+                        guild_id, game, rating, prompt_key, first_seen_at, last_seen_at, seen_count
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, 1)
+                    ON CONFLICT(guild_id, game, rating, prompt_key)
+                    DO UPDATE SET
+                        last_seen_at = excluded.last_seen_at,
+                        seen_count = guild_seen.seen_count + 1
+                    """,
+                    (guild_id, prompt.game, prompt.rating, prompt.key, now_ts, now_ts),
+                )
+
+    def clear_guild_history(self, guild_id: int) -> None:
+        with self.connection:
+            self.connection.execute("DELETE FROM guild_seen WHERE guild_id = ?", (guild_id,))
+
+    def clear_consumer_history(self, consumer_user_id: int) -> None:
+        with self.connection:
+            self.connection.execute("DELETE FROM consumer_seen WHERE consumer_user_id = ?", (consumer_user_id,))
+
+    def clear_all(self) -> None:
+        with self.connection:
+            self.connection.execute("DELETE FROM consumer_seen")
+            self.connection.execute("DELETE FROM guild_seen")
+
+    def get_stats(self) -> dict[str, int]:
+        consumer_rows = self.connection.execute("SELECT COUNT(*) FROM consumer_seen").fetchone()
+        guild_rows = self.connection.execute("SELECT COUNT(*) FROM guild_seen").fetchone()
+        return {
+            "consumerRows": int(consumer_rows[0]) if consumer_rows is not None else 0,
+            "guildRows": int(guild_rows[0]) if guild_rows is not None else 0,
+        }
+
+
+def count_prompts_by_game(prompts: list[PromptEntry]) -> dict[str, int]:
+    counts = {game: 0 for game in CORE_GAMES}
+    for prompt in prompts:
+        if prompt.game in counts:
+            counts[prompt.game] += 1
+    return counts
 
 
 def build_prompt_signature(text: str) -> set[str]:
@@ -679,20 +872,32 @@ def load_ai_cache() -> list[PromptEntry]:
     for item in payload.get("prompts", []):
         text = sanitize_prompt(item.get("text"))
         game = sanitize_prompt(item.get("game"))
-        category = sanitize_prompt(item.get("category")) or "social"
         rating = sanitize_prompt(item.get("rating")) or "PG"
-        tone = sanitize_prompt(item.get("tone")) or category
-        if not text or game != "paranoia" or rating not in RATINGS or contains_blocked_ai_term(text):
+        if not text or game not in CORE_GAMES or rating not in RATINGS or contains_blocked_ai_term(text):
             continue
+
+        spec = AI_GAME_SPECS.get(game)
+        if spec is None:
+            continue
+
+        allowed_categories = tuple(spec["categories"])
+        allowed_tones = tuple(spec["tones"])
+        category = sanitize_prompt(item.get("category")).lower() or allowed_categories[0]
+        tone = sanitize_prompt(item.get("tone")).lower() or category
+        if category not in allowed_categories:
+            category = allowed_categories[0]
+        if tone not in allowed_tones:
+            tone = allowed_tones[0]
+
         prompts.append(
             PromptEntry(
-                game="paranoia",
-                category=category if category in {"social", "bold", "flirty"} else "social",
+                game=game,
+                category=category,
                 rating=rating,
                 text=text,
-                tone=tone if tone in {"social", "bold", "flirty"} else "social",
+                tone=tone,
                 weight=float(item.get("weight") or 1.02),
-                key=sanitize_prompt(item.get("key")) or build_prompt_key("paranoia", category, rating, text),
+                key=sanitize_prompt(item.get("key")) or build_prompt_key(game, category, rating, text),
                 server_only=False,
             )
         )
@@ -713,7 +918,7 @@ def save_ai_cache(prompts: list[PromptEntry]) -> None:
                 "key": prompt.key,
             }
             for prompt in prompts
-            if prompt.game == "paranoia"
+            if prompt.game in CORE_GAMES
         ]
     }
     AI_CACHE_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -725,9 +930,10 @@ class AIPromptService:
         self.model = model
         self.client = OpenAI(api_key=api_key) if self.enabled else None
 
-    async def generate_paranoia_pack(
+    async def generate_prompt_pack(
         self,
         *,
+        game: str,
         rating: str,
         recent_prompts: list[str],
         batch_size: int,
@@ -735,38 +941,52 @@ class AIPromptService:
         if not self.enabled or self.client is None:
             return []
         return await asyncio.to_thread(
-            self._generate_paranoia_pack_sync,
+            self._generate_prompt_pack_sync,
+            game,
             rating,
             recent_prompts,
             batch_size,
         )
 
-    def _generate_paranoia_pack_sync(
+    def _build_instruction(
         self,
+        game: str,
         rating: str,
         recent_prompts: list[str],
         batch_size: int,
-    ) -> list[PromptEntry]:
+    ) -> str:
+        spec = AI_GAME_SPECS[game]
         recent_block = "\n".join(f"{index + 1}. {entry}" for index, entry in enumerate(recent_prompts[:20]))
-        instruction = "\n".join(
+        categories = ", ".join(spec["categories"])
+        tones = ", ".join(spec["tones"])
+        return "\n".join(
             [
                 "Return only a JSON array.",
-                f"Generate {batch_size} unique Discord paranoia prompts.",
+                f"{spec['headline']}.",
+                f"Generate {batch_size} unique Discord prompts for the game '{game}'.",
                 "Each item must be an object with keys: category, tone, text.",
-                "Allowed category values: social, bold, flirty.",
-                "Allowed tone values: social, bold, flirty.",
+                f"Allowed category values: {categories}.",
+                f"Allowed tone values: {tones}.",
                 f"Rating: {rating}",
-                "Focus on Discord server energy: channels, member lists, reactions, voice chat, lurking, timing, screenshots, status, vibes.",
-                "Make them funny, clever, crazy, unique, and playable in a server.",
+                str(spec["focus"]),
+                "Make them funny, clever, crazy, unique, relatable, and playable in a Discord server.",
                 "Keep them controversy-free and non-explicit.",
                 "No politics, religion, caste, race, trauma, abuse, cheating accusations, explicit sexual content, or slurs.",
-                "Avoid generic or stale prompts like hottest person, best kisser, biggest crush.",
-                "Most prompts should start with 'Who here' or 'Whose'.",
+                "Avoid stale prompts like ex drama, generic crush spam, hottest person, best kisser, or repetitive thirst-bait.",
+                str(spec["starter_rule"]),
                 "Recent prompts to avoid:",
                 recent_block or "(none)",
             ]
         )
 
+    def _generate_prompt_pack_sync(
+        self,
+        game: str,
+        rating: str,
+        recent_prompts: list[str],
+        batch_size: int,
+    ) -> list[PromptEntry]:
+        instruction = self._build_instruction(game, rating, recent_prompts, batch_size)
         response = self.client.responses.create(
             model=self.model,
             input=instruction,
@@ -788,6 +1008,9 @@ class AIPromptService:
         except json.JSONDecodeError:
             return []
 
+        spec = AI_GAME_SPECS[game]
+        allowed_categories = set(spec["categories"])
+        allowed_tones = set(spec["tones"])
         prompts: list[PromptEntry] = []
         seen_keys: set[str] = set()
         for item in items:
@@ -796,18 +1019,18 @@ class AIPromptService:
             tone = sanitize_prompt(item.get("tone")).lower() or category
             if (
                 not text
-                or category not in {"social", "bold", "flirty"}
-                or tone not in {"social", "bold", "flirty"}
+                or category not in allowed_categories
+                or tone not in allowed_tones
                 or contains_blocked_ai_term(text)
             ):
                 continue
-            key = build_prompt_key("paranoia", category, rating, text)
+            key = build_prompt_key(game, category, rating, text)
             if key in seen_keys:
                 continue
             seen_keys.add(key)
             prompts.append(
                 PromptEntry(
-                    game="paranoia",
+                    game=game,
                     category=category,
                     rating=rating,
                     text=text,
@@ -820,9 +1043,24 @@ class AIPromptService:
 
         return prompts
 
+    async def generate_paranoia_pack(
+        self,
+        *,
+        rating: str,
+        recent_prompts: list[str],
+        batch_size: int,
+    ) -> list[PromptEntry]:
+        return await self.generate_prompt_pack(
+            game="paranoia",
+            rating=rating,
+            recent_prompts=recent_prompts,
+            batch_size=batch_size,
+        )
+
 class PromptEngine:
-    def __init__(self, prompts: list[PromptEntry], recent_history_limit: int = 220) -> None:
+    def __init__(self, prompts: list[PromptEntry], repeat_store: RepeatStore, recent_history_limit: int = 220) -> None:
         self.prompts = prompts
+        self.repeat_store = repeat_store
         self.recent_history_limit = recent_history_limit
         self.state_by_channel: dict[int, ChannelState] = {}
         self.state_by_guild: dict[int, ChannelState] = {}
@@ -848,17 +1086,24 @@ class PromptEngine:
             added += 1
         return added
 
-    def clear_history(self, *, channel_id: int | None = None, guild_id: int | None = None) -> None:
+    def clear_history(
+        self,
+        *,
+        channel_id: int | None = None,
+        guild_id: int | None = None,
+        clear_all_local: bool = False,
+    ) -> None:
+        if clear_all_local:
+            self.state_by_channel = {}
+            self.state_by_guild = {}
+            return
         if channel_id is not None and channel_id in self.state_by_channel:
             self.state_by_channel[channel_id] = ChannelState()
         if guild_id is not None and guild_id in self.state_by_guild:
             self.state_by_guild[guild_id] = ChannelState()
 
     def get_counts(self) -> dict[str, int]:
-        counts = {game: 0 for game in GAME_LABELS if game != "truth_or_dare"}
-        for prompt in self.prompts:
-            counts[prompt.game] = counts.get(prompt.game, 0) + 1
-        return counts
+        return count_prompts_by_game(self.prompts)
 
     def get_channel_stats(self, channel_id: int) -> dict[str, int]:
         state = self.get_channel_state(channel_id)
@@ -882,57 +1127,28 @@ class PromptEngine:
         if len(state.history) > self.recent_history_limit:
             state.history.pop()
 
-    def record_prompt(self, channel_id: int, guild_id: int | None, prompt: PromptEntry) -> None:
+    def record_prompt(self, channel_id: int, guild_id: int | None, consumer_user_id: int | None, prompt: PromptEntry) -> None:
         self._record_to_state(self.get_channel_state(channel_id), prompt)
         if guild_id is not None:
             self._record_to_state(self.get_guild_state(guild_id), prompt)
+        self.repeat_store.record_prompt(consumer_user_id=consumer_user_id, guild_id=guild_id, prompt=prompt)
 
-    def score_candidates(
-        self,
-        candidates: list[PromptEntry],
-        state: ChannelState,
-        *,
-        prefer_server_prompts: bool = False,
-    ) -> list[tuple[PromptEntry, float]]:
-        recent_entries = state.history[:80]
-        recent_signatures = [build_prompt_signature(entry.text) for entry in recent_entries[:18] if build_prompt_signature(entry.text)]
-        recent_categories = [entry.category for entry in recent_entries[:8]]
-        recent_games = [entry.game for entry in recent_entries[:8]]
-        recent_tones = [entry.tone for entry in recent_entries[:8]]
-        scored: list[tuple[PromptEntry, float]] = []
-
-        for prompt in candidates:
-            signature = build_prompt_signature(prompt.text)
-            overlap = 0.0
-            for recent_signature in recent_signatures:
-                overlap = max(overlap, score_signature_overlap(signature, recent_signature))
-            category_penalty = 0.14 if prompt.category in recent_categories else 0.0
-            game_penalty = 0.05 if prompt.game in recent_games else 0.0
-            tone_penalty = 0.05 if prompt.tone in recent_tones else 0.0
-            flirty_penalty = 0.07 if prompt.category == "flirty" else 0.0
-            usage_penalty = state.usage_counts.get(prompt.key, 0) * 0.06
-            score = overlap + category_penalty + game_penalty + tone_penalty + flirty_penalty + usage_penalty
-            weight = max(0.1, prompt.weight) * (1 / (1 + max(0.0, score * 2.5)))
-            if prefer_server_prompts and prompt.server_only:
-                weight *= 1.28
-            scored.append((prompt, weight))
-
-        scored.sort(key=lambda item: item[1], reverse=True)
-        return scored[:64]
-
-    async def get_next_prompt(
-        self,
-        *,
-        requested_game: str,
-        channel_id: int,
-        guild_id: int | None,
-        requester_tag: str,
-        rating: str | None = None,
-    ) -> PromptResult:
-        game = self.resolve_game(requested_game)
-        effective_rating = rating if rating in RATINGS else "PG"
+    def _build_scoring_state(self, channel_id: int, guild_id: int | None) -> ChannelState:
         channel_state = self.get_channel_state(channel_id)
         guild_state = self.get_guild_state(guild_id) if guild_id is not None else None
+        if guild_state is None:
+            return channel_state
+        return ChannelState(
+            history=channel_state.history[:40] + guild_state.history[:40],
+            used_by_game={},
+            usage_counts={
+                **guild_state.usage_counts,
+                **channel_state.usage_counts,
+            },
+        )
+
+    def _build_matching_pool(self, game: str, guild_id: int | None, rating: str | None) -> list[PromptEntry]:
+        effective_rating = rating if rating in RATINGS else "PG"
         matching = [
             prompt
             for prompt in self.prompts
@@ -948,41 +1164,96 @@ class PromptEngine:
                 if prompt.game == game
                 and (guild_id is not None or not prompt.server_only)
             ]
+        return matching
+
+    def _persistent_penalty(self, seen_info: tuple[float, int] | None, now_ts: float) -> float:
+        if seen_info is None:
+            return 0.0
+        last_seen_at, seen_count = seen_info
+        age_days = max(0.05, (now_ts - last_seen_at) / 86400)
+        recency_penalty = min(0.34, 0.20 / age_days)
+        usage_penalty = min(0.22, seen_count * 0.035)
+        return recency_penalty + usage_penalty
+
+    def score_candidates(
+        self,
+        candidates: list[PromptEntry],
+        state: ChannelState,
+        *,
+        consumer_seen: dict[str, tuple[float, int]] | None = None,
+        guild_seen: dict[str, tuple[float, int]] | None = None,
+        prefer_server_prompts: bool = False,
+    ) -> list[tuple[PromptEntry, float]]:
+        recent_entries = state.history[:80]
+        recent_signatures = [build_prompt_signature(entry.text) for entry in recent_entries[:18] if build_prompt_signature(entry.text)]
+        recent_categories = [entry.category for entry in recent_entries[:8]]
+        recent_games = [entry.game for entry in recent_entries[:8]]
+        recent_tones = [entry.tone for entry in recent_entries[:8]]
+        now_ts = time.time()
+        scored: list[tuple[PromptEntry, float]] = []
+
+        for prompt in candidates:
+            signature = build_prompt_signature(prompt.text)
+            overlap = 0.0
+            for recent_signature in recent_signatures:
+                overlap = max(overlap, score_signature_overlap(signature, recent_signature))
+            category_penalty = 0.14 if prompt.category in recent_categories else 0.0
+            game_penalty = 0.05 if prompt.game in recent_games else 0.0
+            tone_penalty = 0.05 if prompt.tone in recent_tones else 0.0
+            flirty_penalty = 0.07 if prompt.category == "flirty" else 0.0
+            usage_penalty = state.usage_counts.get(prompt.key, 0) * 0.06
+            persistent_penalty = self._persistent_penalty((consumer_seen or {}).get(prompt.key), now_ts) + self._persistent_penalty((guild_seen or {}).get(prompt.key), now_ts)
+            score = overlap + category_penalty + game_penalty + tone_penalty + flirty_penalty + usage_penalty + persistent_penalty
+            weight = max(0.1, prompt.weight) * (1 / (1 + max(0.0, score * 2.5)))
+            if prefer_server_prompts and prompt.server_only:
+                weight *= 1.28
+            scored.append((prompt, weight))
+
+        scored.sort(key=lambda item: item[1], reverse=True)
+        return scored[:64]
+
+    async def get_next_prompt(
+        self,
+        *,
+        requested_game: str,
+        channel_id: int,
+        guild_id: int | None,
+        consumer_user_id: int | None,
+        requester_tag: str,
+        rating: str | None = None,
+        allow_recycle: bool = True,
+    ) -> PromptResult | None:
+        game = self.resolve_game(requested_game)
+        matching = self._build_matching_pool(game, guild_id, rating)
         if not matching:
             raise RuntimeError(f"No prompts are available for {GAME_LABELS.get(game, game)}.")
 
-        used_keys = set(channel_state.used_by_game.get(game, set()))
-        recent_keys = {entry.key for entry in channel_state.history[: self.recent_history_limit]}
-        if guild_state is not None:
-            used_keys.update(guild_state.used_by_game.get(game, set()))
-            recent_keys.update(entry.key for entry in guild_state.history[: self.recent_history_limit])
-        unseen = [prompt for prompt in matching if prompt.key not in used_keys and prompt.key not in recent_keys]
+        consumer_seen = self.repeat_store.get_consumer_seen(consumer_user_id, game)
+        guild_seen = self.repeat_store.get_guild_seen(guild_id, game)
+        unseen = [
+            prompt
+            for prompt in matching
+            if prompt.key not in consumer_seen
+            and prompt.key not in guild_seen
+        ]
 
-        if not unseen:
-            channel_state.used_by_game[game] = set()
-            if guild_state is not None:
-                guild_state.used_by_game[game] = set()
-            unseen = [prompt for prompt in matching if prompt.key not in recent_keys]
-
-        candidate_pool = unseen if unseen else [prompt for prompt in matching if prompt.key not in recent_keys]
+        candidate_pool = unseen
         if not candidate_pool:
+            if not allow_recycle:
+                return None
             candidate_pool = matching
 
+        scoring_state = self._build_scoring_state(channel_id, guild_id)
         selected = weighted_choice(
             self.score_candidates(
                 candidate_pool,
-                channel_state if guild_state is None else ChannelState(
-                    history=channel_state.history[:40] + guild_state.history[:40],
-                    used_by_game={},
-                    usage_counts={
-                        **guild_state.usage_counts,
-                        **channel_state.usage_counts,
-                    },
-                ),
+                scoring_state,
+                consumer_seen=consumer_seen,
+                guild_seen=guild_seen,
                 prefer_server_prompts=guild_id is not None,
             )
         ) or random.choice(candidate_pool)
-        self.record_prompt(channel_id, guild_id, selected)
+        self.record_prompt(channel_id, guild_id, consumer_user_id, selected)
         return PromptResult(
             id=short_id(game),
             game=selected.game,
@@ -1210,6 +1481,7 @@ def build_disabled_embed(scope: str, source: str) -> discord.Embed:
 
 def build_control_status_embed(bot_instance: "TruthDareBot", interaction: discord.Interaction) -> discord.Embed:
     settings = bot_instance.runtime_settings
+    repeat_stats = bot_instance.repeat_store.get_stats()
     scope_lines = [
         f"Admin server disabled: **{'Yes' if interaction.guild_id in settings.disabled_guilds else 'No'}**",
         f"Admin channel disabled: **{'Yes' if (interaction.channel_id or 0) in settings.disabled_channels else 'No'}**",
@@ -1217,8 +1489,11 @@ def build_control_status_embed(bot_instance: "TruthDareBot", interaction: discor
         f"Developer channel lock: **{'Yes' if (interaction.channel_id or 0) in settings.dev_disabled_channels else 'No'}**",
         f"Admin Paranoia sender hidden: **{'Yes' if interaction.guild_id in settings.paranoia_hide_sender_guilds else 'No'}**",
         f"Developer Paranoia sender hidden: **{'Yes' if interaction.guild_id in settings.dev_paranoia_hide_sender_guilds else 'No'}**",
+        f"Global consumer memory: **ON**",
+        f"Persistent consumer rows: **{repeat_stats['consumerRows']:,}**",
+        f"Persistent guild rows: **{repeat_stats['guildRows']:,}**",
         f"Developer IDs loaded: **{len(bot_instance.dev_user_ids)}**",
-        f"AI paranoia refresh: **{'ON' if bot_instance.ai_prompt_service.enabled else 'OFF'}**",
+        f"AI prompt refresh: **{'ON' if bot_instance.ai_prompt_service.enabled else 'OFF'}**",
     ]
     counts = bot_instance.prompt_engine.get_counts()
     embed = discord.Embed(
@@ -1377,10 +1652,11 @@ class PromptCardView(discord.ui.LayoutView):
                 except discord.HTTPException:
                     pass
 
-            next_prompt = await self.prompt_engine.get_next_prompt(
+            next_prompt = await bot.get_next_prompt(
                 requested_game=game,
                 channel_id=interaction.channel_id or 0,
                 guild_id=interaction.guild_id,
+                consumer_user_id=interaction.user.id,
                 requester_tag=str(interaction.user),
                 rating=rating,
             )
@@ -1519,6 +1795,8 @@ class TruthDareBot(commands.Bot):
         runtime_settings: RuntimeSettings,
         ai_prompt_service: AIPromptService,
         ai_cache_prompts: list[PromptEntry],
+        base_prompts: list[PromptEntry],
+        repeat_store: RepeatStore,
     ) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
@@ -1536,6 +1814,8 @@ class TruthDareBot(commands.Bot):
         self.runtime_settings = runtime_settings
         self.ai_prompt_service = ai_prompt_service
         self.ai_cache_prompts = ai_cache_prompts
+        self.base_prompts = list(base_prompts)
+        self.repeat_store = repeat_store
         self.ai_refresh_task: asyncio.Task | None = None
         self.dev_user_ids: set[int] = set(DEFAULT_DEV_USER_IDS) | {
             int(value)
@@ -1561,10 +1841,26 @@ class TruthDareBot(commands.Bot):
         return user_id in self.dev_user_ids
 
     def reload_prompt_engine(self) -> None:
-        base_prompts = extend_with_server_reference_prompts(load_prompt_catalog())
+        self.base_prompts = extend_with_server_reference_prompts(load_prompt_catalog())
         self.ai_cache_prompts = load_ai_cache()
-        self.prompt_engine = PromptEngine(base_prompts)
+        self.prompt_engine = PromptEngine(list(self.base_prompts), self.repeat_store)
         self.prompt_engine.extend_prompts(self.ai_cache_prompts)
+
+    def get_ai_cache_counts(self) -> dict[str, int]:
+        return count_prompts_by_game(self.ai_cache_prompts)
+
+    def _is_distinct_generated_prompt(
+        self,
+        prompt: PromptEntry,
+        existing_signatures: list[set[str]],
+    ) -> bool:
+        signature = build_prompt_signature(prompt.text)
+        if not signature:
+            return True
+        for existing_signature in existing_signatures:
+            if existing_signature and score_signature_overlap(signature, existing_signature) >= 0.78:
+                return False
+        return True
 
     async def sync_command_tree(self, *, guild_only: bool) -> str:
         guild_id = read_env_int("DISCORD_GUILD_ID", "GUILD_ID")
@@ -1576,57 +1872,141 @@ class TruthDareBot(commands.Bot):
         await self.tree.sync()
         return "global"
 
-    async def refresh_ai_paranoia_cache(self, *, batch_size: int | None = None) -> int:
+    async def refresh_ai_prompt_cache(
+        self,
+        *,
+        game: str | None = None,
+        rating: str | None = None,
+        batch_size: int | None = None,
+    ) -> int:
         if not self.ai_prompt_service.enabled:
             return 0
 
-        existing_texts = [prompt.text for prompt in self.prompt_engine.prompts if prompt.game == "paranoia"]
-        added_total = 0
-        batch_target = batch_size or AI_PARANOIA_BATCH_SIZE
+        target_games = [game] if game in CORE_GAMES else list(CORE_GAMES)
+        target_ratings = [rating] if rating in RATINGS else list(RATINGS)
         existing_cache_keys = {prompt.key for prompt in self.ai_cache_prompts}
+        existing_signatures: dict[str, list[set[str]]] = {
+            target_game: [
+                build_prompt_signature(prompt.text)
+                for prompt in self.prompt_engine.prompts
+                if prompt.game == target_game
+            ]
+            for target_game in target_games
+        }
+        added_total = 0
 
-        for rating in RATINGS:
-            current_ai_count = sum(
-                1
-                for prompt in self.ai_cache_prompts
-                if prompt.game == "paranoia" and prompt.rating == rating
-            )
-            if current_ai_count >= AI_PARANOIA_CACHE_TARGET and batch_size is None:
-                continue
+        for target_game in target_games:
+            for target_rating in target_ratings:
+                current_ai_count = sum(
+                    1
+                    for prompt in self.ai_cache_prompts
+                    if prompt.game == target_game and prompt.rating == target_rating
+                )
+                if batch_size is None and current_ai_count >= AI_CACHE_TARGETS[target_game]:
+                    continue
 
-            generated = await self.ai_prompt_service.generate_paranoia_pack(
-                rating=rating,
-                recent_prompts=existing_texts[-40:],
-                batch_size=batch_target,
-            )
-            if not generated:
-                continue
+                effective_batch = batch_size or AI_BATCH_SIZES[target_game]
+                recent_prompts = [
+                    prompt.text
+                    for prompt in self.prompt_engine.prompts
+                    if prompt.game == target_game and prompt.rating == target_rating
+                ][-60:]
+                generated = await self.ai_prompt_service.generate_prompt_pack(
+                    game=target_game,
+                    rating=target_rating,
+                    recent_prompts=recent_prompts,
+                    batch_size=effective_batch,
+                )
+                if not generated:
+                    continue
 
-            added = self.prompt_engine.extend_prompts(generated)
-            if added == 0:
-                continue
-
-            for prompt in generated:
-                if prompt.key not in existing_cache_keys:
+                approved: list[PromptEntry] = []
+                for prompt in generated:
+                    if prompt.key in existing_cache_keys:
+                        continue
+                    if contains_blocked_ai_term(prompt.text):
+                        continue
+                    if not self._is_distinct_generated_prompt(prompt, existing_signatures[target_game]):
+                        continue
+                    approved.append(prompt)
                     existing_cache_keys.add(prompt.key)
-                    self.ai_cache_prompts.append(prompt)
-                    existing_texts.append(prompt.text)
+                    existing_signatures[target_game].append(build_prompt_signature(prompt.text))
 
-            added_total += added
+                if not approved:
+                    continue
+
+                added = self.prompt_engine.extend_prompts(approved)
+                if added == 0:
+                    continue
+
+                self.ai_cache_prompts.extend(approved)
+                added_total += added
 
         if added_total > 0:
             save_ai_cache(self.ai_cache_prompts)
 
         return added_total
 
-    async def ai_paranoia_refresh_loop(self) -> None:
+    async def refresh_ai_paranoia_cache(self, *, batch_size: int | None = None) -> int:
+        return await self.refresh_ai_prompt_cache(game="paranoia", batch_size=batch_size)
+
+    async def ai_prompt_refresh_loop(self) -> None:
         await self.wait_until_ready()
         while not self.is_closed():
             try:
-                await self.refresh_ai_paranoia_cache()
+                await self.refresh_ai_prompt_cache()
             except Exception as error:  # pragma: no cover
-                print(f"AI paranoia refresh failed: {error}")
+                print(f"AI prompt refresh failed: {error}")
             await asyncio.sleep(AI_PARANOIA_REFRESH_SECONDS)
+
+    async def get_next_prompt(
+        self,
+        *,
+        requested_game: str,
+        channel_id: int,
+        guild_id: int | None,
+        consumer_user_id: int | None,
+        requester_tag: str,
+        rating: str | None = None,
+    ) -> PromptResult:
+        resolved_game = self.prompt_engine.resolve_game(requested_game)
+        prompt = await self.prompt_engine.get_next_prompt(
+            requested_game=resolved_game,
+            channel_id=channel_id,
+            guild_id=guild_id,
+            consumer_user_id=consumer_user_id,
+            requester_tag=requester_tag,
+            rating=rating,
+            allow_recycle=False,
+        )
+        if prompt is None and self.ai_prompt_service.enabled:
+            await self.refresh_ai_prompt_cache(
+                game=resolved_game,
+                rating=rating,
+                batch_size=AI_BATCH_SIZES.get(resolved_game, AI_PARANOIA_BATCH_SIZE),
+            )
+            prompt = await self.prompt_engine.get_next_prompt(
+                requested_game=resolved_game,
+                channel_id=channel_id,
+                guild_id=guild_id,
+                consumer_user_id=consumer_user_id,
+                requester_tag=requester_tag,
+                rating=rating,
+                allow_recycle=False,
+            )
+        if prompt is None:
+            prompt = await self.prompt_engine.get_next_prompt(
+                requested_game=resolved_game,
+                channel_id=channel_id,
+                guild_id=guild_id,
+                consumer_user_id=consumer_user_id,
+                requester_tag=requester_tag,
+                rating=rating,
+                allow_recycle=True,
+            )
+        if prompt is None:
+            raise RuntimeError(f"No prompts are available for {GAME_LABELS.get(resolved_game, resolved_game)}.")
+        return prompt
 
     async def on_ready(self) -> None:
         write_status(
@@ -1647,7 +2027,7 @@ class TruthDareBot(commands.Bot):
         )
 
         if self.ai_prompt_service.enabled and self.ai_refresh_task is None:
-            self.ai_refresh_task = asyncio.create_task(self.ai_paranoia_refresh_loop())
+            self.ai_refresh_task = asyncio.create_task(self.ai_prompt_refresh_loop())
 
         if self.commands_synced:
             return
@@ -1725,16 +2105,19 @@ if not TOKEN:
     raise RuntimeError("BOT_TOKEN or DISCORD_TOKEN is not set.")
 
 runtime_settings = load_runtime_settings()
+repeat_store = RepeatStore(REPEAT_DB_FILE)
 ai_prompt_service = AIPromptService(api_key=OPENAI_API_KEY, model=OPENAI_MODEL)
 base_prompts = extend_with_server_reference_prompts(load_prompt_catalog())
 ai_cache_prompts = load_ai_cache()
-prompt_engine = PromptEngine(base_prompts)
+prompt_engine = PromptEngine(list(base_prompts), repeat_store)
 prompt_engine.extend_prompts(ai_cache_prompts)
 bot = TruthDareBot(
     prompt_engine=prompt_engine,
     runtime_settings=runtime_settings,
     ai_prompt_service=ai_prompt_service,
     ai_cache_prompts=ai_cache_prompts,
+    base_prompts=base_prompts,
+    repeat_store=repeat_store,
 )
 
 
@@ -1742,10 +2125,11 @@ async def send_game_prompt(interaction: discord.Interaction, game: str, rating: 
     if not await check_bot_enabled(interaction):
         return
     await interaction.response.defer()
-    prompt = await bot.prompt_engine.get_next_prompt(
+    prompt = await bot.get_next_prompt(
         requested_game=game,
         channel_id=interaction.channel_id or 0,
         guild_id=interaction.guild_id,
+        consumer_user_id=interaction.user.id,
         requester_tag=str(interaction.user),
         rating=rating,
     )
@@ -1820,10 +2204,11 @@ async def paranoia_command(
         return
 
     await interaction.response.defer(ephemeral=True)
-    prompt = await bot.prompt_engine.get_next_prompt(
+    prompt = await bot.get_next_prompt(
         requested_game="paranoia",
         channel_id=interaction.channel_id or 0,
         guild_id=interaction.guild_id,
+        consumer_user_id=target.id,
         requester_tag=str(interaction.user),
         rating=rating.value if rating else None,
     )
@@ -1868,14 +2253,20 @@ async def tod_stats(interaction: discord.Interaction) -> None:
         return
 
     await interaction.response.defer(ephemeral=True)
-    counts = bot.prompt_engine.get_counts()
+    total_counts = bot.prompt_engine.get_counts()
+    curated_counts = count_prompts_by_game(bot.base_prompts)
+    ai_counts = bot.get_ai_cache_counts()
     channel_stats = bot.prompt_engine.get_channel_stats(interaction.channel_id or 0)
+    repeat_stats = bot.repeat_store.get_stats()
     content = "\n".join(
         [
-            f"Truth pool: **{counts.get('truth', 0):,}**",
-            f"Dare pool: **{counts.get('dare', 0):,}**",
-            f"Never Have I Ever pool: **{counts.get('never_have_i_ever', 0):,}**",
-            f"Paranoia pool: **{counts.get('paranoia', 0):,}**",
+            f"Truth pool: **{total_counts.get('truth', 0):,}** | Curated **{curated_counts.get('truth', 0):,}** | AI **{ai_counts.get('truth', 0):,}**",
+            f"Dare pool: **{total_counts.get('dare', 0):,}** | Curated **{curated_counts.get('dare', 0):,}** | AI **{ai_counts.get('dare', 0):,}**",
+            f"Never Have I Ever pool: **{total_counts.get('never_have_i_ever', 0):,}** | Curated **{curated_counts.get('never_have_i_ever', 0):,}** | AI **{ai_counts.get('never_have_i_ever', 0):,}**",
+            f"Paranoia pool: **{total_counts.get('paranoia', 0):,}** | Curated **{curated_counts.get('paranoia', 0):,}** | AI **{ai_counts.get('paranoia', 0):,}**",
+            f"Global consumer memory: **ON**",
+            f"Persistent consumer rows: **{repeat_stats['consumerRows']:,}**",
+            f"Persistent guild rows: **{repeat_stats['guildRows']:,}**",
             f"Channel recent history: **{channel_stats['historySize']}**",
             f"Unique truths used in channel: **{channel_stats['truthUsed']}**",
             f"Unique dares used in channel: **{channel_stats['dareUsed']}**",
@@ -1907,6 +2298,18 @@ def parse_scope(value: str | None) -> str | None:
     if normalized in {"channel", "server"}:
         return normalized
     return None
+
+
+def parse_user_id(value: str | None) -> int | None:
+    if not value:
+        return None
+    match = re.search(r"(\d{15,22})", value)
+    if match is None:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
 
 
 class AutoHideControlCard(discord.ui.LayoutView):
@@ -1984,7 +2387,7 @@ def build_admin_help_view(owner_id: int) -> ControlHelpCard:
             ("<parasentbyoff", "Hide the Paranoia 'Sent by' line for this server unless a developer override changes it."),
             ("<parasentbyon", "Show the Paranoia 'Sent by' line again for this server unless a developer override exists."),
             ("<clearhistory channel", "Reset repeat memory for this channel."),
-            ("<clearhistory server", "Reset repeat memory for this server."),
+            ("<clearhistory server", "Reset this server's repeat memory and local freshness."),
         ],
         notes=[
             "Requires Manage Server.",
@@ -2010,7 +2413,9 @@ def build_dev_help_view(owner_id: int) -> ControlHelpCard:
             ("<<parasentbyon", "Remove the developer Paranoia 'Sent by' hide for this server."),
             ("<<reloadprompts", "Reload prompt packs from disk."),
             ("<<clearhistory channel", "Reset repeat memory for this channel."),
-            ("<<clearhistory server", "Reset repeat memory for this server."),
+            ("<<clearhistory server", "Reset this server's repeat memory and local freshness."),
+            ("<<clearhistory user <id>", "Reset one user's global repeat memory."),
+            ("<<clearhistory global", "Reset all persistent repeat memory."),
             (f"<<fillparanoia [3-{AI_PARANOIA_BATCH_SIZE if AI_PARANOIA_BATCH_SIZE > 3 else 12}]", "Add AI paranoia prompts."),
             ("<<sync guild | global", "Sync slash commands."),
             ("<<sendmsg <text>", "Send a custom message into the current channel."),
@@ -2338,7 +2743,11 @@ async def prefix_reloadprompts(ctx: commands.Context[Any]) -> None:
 
 
 @bot.command(name="clearhistory")
-async def prefix_clearhistory(ctx: commands.Context[Any], scope: str | None = None) -> None:
+async def prefix_clearhistory(
+    ctx: commands.Context[Any],
+    scope: str | None = None,
+    target_value: str | None = None,
+) -> None:
     developer_mode = ctx.prefix == "<<"
     if developer_mode:
         if not await ensure_dev_ctx(ctx):
@@ -2348,20 +2757,65 @@ async def prefix_clearhistory(ctx: commands.Context[Any], scope: str | None = No
             return
         if not await ensure_admin_ctx(ctx):
             return
+    normalized_scope = (scope or "").strip().lower()
     parsed_scope = parse_scope(scope)
-    if parsed_scope is None:
+    if parsed_scope is None and not (developer_mode and normalized_scope in {"user", "global"}):
         prefix = "<<" if developer_mode else "<"
-        await send_hidden_control_response(ctx, content=f"Use `{prefix}clearhistory channel` or `{prefix}clearhistory server`.")
+        extra = "`<<clearhistory user <id>` or `<<clearhistory global`." if developer_mode else ""
+        await send_hidden_control_response(
+            ctx,
+            content=f"Use `{prefix}clearhistory channel` or `{prefix}clearhistory server`. {extra}".strip(),
+        )
         return
+
+    if developer_mode and normalized_scope == "global":
+        bot.repeat_store.clear_all()
+        bot.prompt_engine.clear_history(clear_all_local=True)
+        await send_hidden_control_response(
+            ctx,
+            embed=discord.Embed(
+                title="History cleared",
+                description="Cleared **all persistent repeat memory** and local freshness.",
+                color=0x57F287,
+            ),
+        )
+        return
+
+    if developer_mode and normalized_scope == "user":
+        user_id = parse_user_id(target_value)
+        if user_id is None:
+            await send_hidden_control_response(ctx, content="Use `<<clearhistory user <user_id>`.")
+            return
+        bot.repeat_store.clear_consumer_history(user_id)
+        await send_hidden_control_response(
+            ctx,
+            embed=discord.Embed(
+                title="User history cleared",
+                description=f"Cleared global repeat memory for **{user_id}**.",
+                color=0x57F287,
+            ),
+        )
+        return
+
     if parsed_scope == "server":
-        bot.prompt_engine.clear_history(guild_id=ctx.guild.id if ctx.guild else None)
+        if ctx.guild is None:
+            await send_hidden_control_response(ctx, content="This command only works in servers.")
+            return
+        guild_id = ctx.guild.id if ctx.guild else None
+        if guild_id is not None:
+            bot.repeat_store.clear_guild_history(guild_id)
+        bot.prompt_engine.clear_history(guild_id=guild_id)
     else:
         bot.prompt_engine.clear_history(channel_id=ctx.channel.id)
     await send_hidden_control_response(
         ctx,
         embed=discord.Embed(
             title="History cleared",
-            description=f"Cleared **{parsed_scope}** repeat memory.",
+            description=(
+                f"Cleared **{parsed_scope}** repeat memory."
+                if parsed_scope == "channel"
+                else "Cleared **server** repeat memory and local freshness."
+            ),
             color=0x57F287,
         ),
     )

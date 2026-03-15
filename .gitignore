@@ -4,8 +4,12 @@ node_modules/
 data/render_runtime_state.json
 data/runtime_status.json
 data/*.sqlite
+data/*.sqlite3
 data/*.sqlite-journal
 data/*.sqlite-shm
 data/*.sqlite-wal
+data/*.sqlite3-journal
+data/*.sqlite3-shm
+data/*.sqlite3-wal
 __pycache__/
 *.pyc
