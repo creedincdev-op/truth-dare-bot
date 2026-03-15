@@ -3,7 +3,7 @@ const RUNTIME_CONFIG = window.TRUTH_OR_DARE_CONFIG || {};
 const DEFAULT_SITE_DATA = {
   brand: "Truth OR Dare",
   companyName: "CreeD INC. </>",
-  developerName: "! YUVRAJJ </> PIXELATED",
+  developerName: "! YUVRAJJ </>",
   developerCreditName: "YUVRAJ",
   developerDiscordId: "1240237445841420302",
   counts: {

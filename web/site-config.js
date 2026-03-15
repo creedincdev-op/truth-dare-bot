@@ -3,7 +3,7 @@ window.TRUTH_OR_DARE_CONFIG = {
   apiBase: "/api",
   companyName: "CreeD INC. </>",
   clientId: "1480626648163549375",
-  developerName: "! YUVRAJJ </> PIXELATED",
+  developerName: "! YUVRAJJ </>",
   developerCreditName: "YUVRAJ",
   developerDiscordId: "1240237445841420302",
   developerAvatarUrl: "https://cdn.discordapp.com/avatars/1240237445841420302/9f93b9ff0df7ad746b70b344c448dbbe.png?size=512",
