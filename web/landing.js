@@ -88,6 +88,18 @@ const state = {
   rotationId: null,
 };
 
+const LOCAL_ROUTE_MAP = {
+  "/": "./index.html",
+  "/features": "./features.html",
+  "/docs": "./docs.html",
+  "/faq": "./faq.html",
+  "/support": "./support.html",
+  "/developer": "./developer.html",
+  "/license": "./license.html",
+  "/privacy": "./privacy.html",
+  "/terms": "./terms.html",
+};
+
 function cloneDefaultData() {
   return JSON.parse(JSON.stringify(DEFAULT_SITE_DATA));
 }
@@ -123,6 +135,13 @@ function apiUrl(path) {
 
 function isHttpContext() {
   return window.location.protocol === "http:" || window.location.protocol === "https:";
+}
+
+function routeUrl(path) {
+  if (!isHttpContext() && LOCAL_ROUTE_MAP[path]) {
+    return LOCAL_ROUTE_MAP[path];
+  }
+  return path;
 }
 
 function readFallbackData() {
@@ -404,7 +423,7 @@ function syncInviteLinks(inviteUrl, clientId) {
   }
 
   syncLinkGroup("invite", {
-    fallbackUrl: "./docs.html",
+    fallbackUrl: routeUrl("/docs"),
     fallbackLabel: "See Commands",
     fallbackExternal: false,
   });
@@ -437,9 +456,22 @@ function syncHealthLinks() {
   }
 
   syncLinkGroup("health", {
-    fallbackUrl: "./support.html",
+    fallbackUrl: routeUrl("/support"),
     fallbackLabel: "Open support page",
     fallbackExternal: false,
+  });
+}
+
+function syncLocalRouteLinks() {
+  if (isHttpContext()) {
+    return;
+  }
+
+  document.querySelectorAll("a[href]").forEach((element) => {
+    const href = element.getAttribute("href");
+    if (href && LOCAL_ROUTE_MAP[href]) {
+      element.setAttribute("href", LOCAL_ROUTE_MAP[href]);
+    }
   });
 }
 
@@ -627,6 +659,7 @@ async function refreshStatus() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  syncLocalRouteLinks();
   await loadSiteData();
   syncDeveloperProfile();
   initRevealMotion();
