@@ -180,6 +180,8 @@ class RuntimeSettings:
     disabled_channels: set[int] = field(default_factory=set)
     dev_disabled_guilds: set[int] = field(default_factory=set)
     dev_disabled_channels: set[int] = field(default_factory=set)
+    paranoia_hide_sender_guilds: set[int] = field(default_factory=set)
+    dev_paranoia_hide_sender_guilds: set[int] = field(default_factory=set)
 
 
 paranoia_rounds: dict[str, ParanoiaRound] = {}
@@ -287,6 +289,8 @@ def load_runtime_settings() -> RuntimeSettings:
         disabled_channels={int(value) for value in payload.get("disabled_channels", [])},
         dev_disabled_guilds={int(value) for value in payload.get("dev_disabled_guilds", [])},
         dev_disabled_channels={int(value) for value in payload.get("dev_disabled_channels", [])},
+        paranoia_hide_sender_guilds={int(value) for value in payload.get("paranoia_hide_sender_guilds", [])},
+        dev_paranoia_hide_sender_guilds={int(value) for value in payload.get("dev_paranoia_hide_sender_guilds", [])},
     )
 
 
@@ -299,6 +303,8 @@ def save_runtime_settings(settings: RuntimeSettings) -> None:
                 "disabled_channels": sorted(settings.disabled_channels),
                 "dev_disabled_guilds": sorted(settings.dev_disabled_guilds),
                 "dev_disabled_channels": sorted(settings.dev_disabled_channels),
+                "paranoia_hide_sender_guilds": sorted(settings.paranoia_hide_sender_guilds),
+                "dev_paranoia_hide_sender_guilds": sorted(settings.dev_paranoia_hide_sender_guilds),
             },
             indent=2,
         ),
@@ -325,6 +331,16 @@ def get_disable_state(
 def is_location_disabled(settings: RuntimeSettings, guild_id: int | None, channel_id: int | None) -> bool:
     scope, _source = get_disable_state(settings, guild_id, channel_id)
     return scope is not None
+
+
+def should_show_paranoia_sender(settings: RuntimeSettings, guild_id: int | None) -> bool:
+    if guild_id is None:
+        return True
+    if guild_id in settings.dev_paranoia_hide_sender_guilds:
+        return False
+    if guild_id in settings.paranoia_hide_sender_guilds:
+        return False
+    return True
 
 
 def build_prompt_signature(text: str) -> set[str]:
@@ -1043,23 +1059,33 @@ def build_paranoia_footer_text(round_data: ParanoiaRound, *, include_type: bool 
     return f"-# {' • '.join(parts)}"
 
 
-def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = False) -> str:
+def build_paranoia_dm_details(
+    round_data: ParanoiaRound,
+    settings: RuntimeSettings,
+    *,
+    answered: bool = False,
+) -> str:
     reveal_line = "Your answer was sent anonymously." if answered else "Your name stays out of the public reveal."
     hint_line = (
         "-# Locked in. The public reveal already has your anonymous answer."
         if answered
         else "-# Keep it mysterious, funny, and non-controversial."
     )
-    return "\n".join(
+    details = [
+        "-# 🔗 From",
+        f"<#{round_data.channel_id}>",
+    ]
+    if should_show_paranoia_sender(settings, round_data.guild_id):
+        details[-1] = f"{details[-1]}  ** 👤 || Sent by <@{round_data.requester_id}>**"
+    details.extend(
         [
-            "-# 🔗 From",
-            f"<#{round_data.channel_id}>  ** 👤 || Sent by {escape_md(round_data.requester_name)}**",
             "",
             "**🎭 Reveal style**",
             f"**{reveal_line}**",
             hint_line,
         ]
     )
+    return "\n".join(details)
 
 
 def build_paranoia_card_container(
@@ -1189,6 +1215,8 @@ def build_control_status_embed(bot_instance: "TruthDareBot", interaction: discor
         f"Admin channel disabled: **{'Yes' if (interaction.channel_id or 0) in settings.disabled_channels else 'No'}**",
         f"Developer server lock: **{'Yes' if interaction.guild_id in settings.dev_disabled_guilds else 'No'}**",
         f"Developer channel lock: **{'Yes' if (interaction.channel_id or 0) in settings.dev_disabled_channels else 'No'}**",
+        f"Admin Paranoia sender hidden: **{'Yes' if interaction.guild_id in settings.paranoia_hide_sender_guilds else 'No'}**",
+        f"Developer Paranoia sender hidden: **{'Yes' if interaction.guild_id in settings.dev_paranoia_hide_sender_guilds else 'No'}**",
         f"Developer IDs loaded: **{len(bot_instance.dev_user_ids)}**",
         f"AI paranoia refresh: **{'ON' if bot_instance.ai_prompt_service.enabled else 'OFF'}**",
     ]
@@ -1463,7 +1491,7 @@ class ParanoiaAnswerView(discord.ui.LayoutView):
                 "**Truth OR Dare • Paranoia**\n"
                 + ("## ✅ Answer Sent." if answered else "## 🤫 Secret Paranoia Drop")
                 + f"\n## {escape_md(round_data.prompt.text)}\n"
-                + build_paranoia_dm_details(round_data, answered=answered)
+                + build_paranoia_dm_details(round_data, self.bot_instance.runtime_settings, answered=answered)
             )
         )
         row = discord.ui.ActionRow()
@@ -1953,6 +1981,8 @@ def build_admin_help_view(owner_id: int) -> ControlHelpCard:
             ("<disableall server", "Disable Truth OR Dare bot commands in this server."),
             ("<enableall channel", "Re-enable Truth OR Dare bot commands in this channel unless a developer lock exists."),
             ("<enableall server", "Re-enable Truth OR Dare bot commands in this server unless a developer lock exists."),
+            ("<parasentbyoff", "Hide the Paranoia 'Sent by' line for this server unless a developer override changes it."),
+            ("<parasentbyon", "Show the Paranoia 'Sent by' line again for this server unless a developer override exists."),
             ("<clearhistory channel", "Reset repeat memory for this channel."),
             ("<clearhistory server", "Reset repeat memory for this server."),
         ],
@@ -1976,6 +2006,8 @@ def build_dev_help_view(owner_id: int) -> ControlHelpCard:
             ("<<disableall server", "Developer-lock Truth OR Dare bot commands in this server."),
             ("<<enableall channel", "Remove the developer lock from Truth OR Dare bot commands in this channel."),
             ("<<enableall server", "Remove the developer lock from Truth OR Dare bot commands in this server."),
+            ("<<parasentbyoff", "Developer-hide the Paranoia 'Sent by' line for this server."),
+            ("<<parasentbyon", "Remove the developer Paranoia 'Sent by' hide for this server."),
             ("<<reloadprompts", "Reload prompt packs from disk."),
             ("<<clearhistory channel", "Reset repeat memory for this channel."),
             ("<<clearhistory server", "Reset repeat memory for this server."),
@@ -2190,6 +2222,87 @@ async def prefix_adminstatus(ctx: commands.Context[Any]) -> None:
         return
     fake_interaction = type("StatusCtx", (), {"guild_id": ctx.guild.id if ctx.guild else None, "channel_id": ctx.channel.id})()
     await send_hidden_control_response(ctx, embed=build_control_status_embed(bot, fake_interaction))
+
+
+@bot.command(name="parasentbyoff")
+async def prefix_parasentbyoff(ctx: commands.Context[Any]) -> None:
+    developer_mode = ctx.prefix == "<<"
+    if developer_mode:
+        if not await ensure_dev_ctx(ctx):
+            return
+    else:
+        if ctx.prefix != "<":
+            return
+        if not await ensure_admin_ctx(ctx):
+            return
+
+    if ctx.guild is None:
+        await send_hidden_control_response(ctx, content="This command only works in servers.")
+        return
+
+    target_set = (
+        bot.runtime_settings.dev_paranoia_hide_sender_guilds
+        if developer_mode
+        else bot.runtime_settings.paranoia_hide_sender_guilds
+    )
+    target_set.add(ctx.guild.id)
+    save_runtime_settings(bot.runtime_settings)
+    await send_hidden_control_response(
+        ctx,
+        embed=discord.Embed(
+            title="Paranoia sender hidden" if developer_mode else "Paranoia sender hidden for server",
+            description=(
+                "Developer override enabled. Paranoia DMs from this server will not show the requester."
+                if developer_mode
+                else "Paranoia DMs from this server will not show the requester unless a developer override changes it."
+            ),
+            color=0xED4245 if developer_mode else 0xF39C12,
+        ),
+    )
+
+
+@bot.command(name="parasentbyon")
+async def prefix_parasentbyon(ctx: commands.Context[Any]) -> None:
+    developer_mode = ctx.prefix == "<<"
+    if developer_mode:
+        if not await ensure_dev_ctx(ctx):
+            return
+    else:
+        if ctx.prefix != "<":
+            return
+        if not await ensure_admin_ctx(ctx):
+            return
+
+    if ctx.guild is None:
+        await send_hidden_control_response(ctx, content="This command only works in servers.")
+        return
+
+    if not developer_mode and ctx.guild.id in bot.runtime_settings.dev_paranoia_hide_sender_guilds:
+        await send_hidden_control_response(
+            ctx,
+            content="Developer Paranoia sender hide is active on this server. Use `<<parasentbyon` to remove it.",
+        )
+        return
+
+    target_set = (
+        bot.runtime_settings.dev_paranoia_hide_sender_guilds
+        if developer_mode
+        else bot.runtime_settings.paranoia_hide_sender_guilds
+    )
+    target_set.discard(ctx.guild.id)
+    save_runtime_settings(bot.runtime_settings)
+    await send_hidden_control_response(
+        ctx,
+        embed=discord.Embed(
+            title="Paranoia sender shown" if developer_mode else "Paranoia sender shown for server",
+            description=(
+                "Developer override removed. Paranoia DMs from this server can show the requester again."
+                if developer_mode
+                else "Paranoia DMs from this server can show the requester again unless a developer override is active."
+            ),
+            color=0x57F287,
+        ),
+    )
 
 
 @bot.command(name="devhelp")
