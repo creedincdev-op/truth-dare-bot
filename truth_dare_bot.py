@@ -1004,16 +1004,16 @@ def build_paranoia_footer_text(round_data: ParanoiaRound, *, include_type: bool 
 def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = False) -> str:
     reveal_line = "Your answer was sent anonymously." if answered else "Your name stays out of the public reveal."
     hint_line = (
-        "**-# Locked in. The public reveal already has your anonymous answer.**"
+        "-# Locked in. The public reveal already has your anonymous answer."
         if answered
-        else "**-# Reply once. Keep it funny, clean, and server-safe.**"
+        else "-# Reply once. Keep it funny, clean, and server-safe."
     )
     return "\n".join(
         [
             "-# 🔗 From",
             f"<#{round_data.channel_id}>",
-            f"** 👤 || Sent by {escape_md(round_data.requester_name)}**  ",
-            "**-# 🎭 Reveal style** ",
+            f"** 👤 || Sent by {escape_md(round_data.requester_name)}**",
+            "**🎭 Reveal style**",
             f"**{reveal_line}**",
             hint_line,
         ]
@@ -1411,7 +1411,7 @@ class ParanoiaAnswerView(discord.ui.LayoutView):
         container.add_item(
             discord.ui.TextDisplay(
                 "**Truth OR Dare • Paranoia**\n"
-                + ("**## ✅ Answer Sent.** " if answered else "**## 🤫 Secret Paranoia Drop** ")
+                + ("## ✅ Answer Sent." if answered else "## 🤫 Secret Paranoia Drop")
                 + f"\n## {escape_md(round_data.prompt.text)}\n"
                 + build_paranoia_dm_details(round_data, answered=answered)
             )
