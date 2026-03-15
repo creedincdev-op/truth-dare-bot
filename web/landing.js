@@ -148,6 +148,24 @@ function setHtml(id, value) {
   }
 }
 
+function fallbackAvatarDataUri(label) {
+  const monogram = String(label || "Y").trim().slice(0, 1).toUpperCase();
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+      <defs>
+        <linearGradient id="g" x1="0%" x2="100%" y1="0%" y2="100%">
+          <stop offset="0%" stop-color="#71f0ff" />
+          <stop offset="55%" stop-color="#d4ff45" />
+          <stop offset="100%" stop-color="#ff7a5c" />
+        </linearGradient>
+      </defs>
+      <rect width="512" height="512" rx="124" fill="#07131b" />
+      <rect x="18" y="18" width="476" height="476" rx="108" fill="url(#g)" opacity="0.18" />
+      <text x="50%" y="54%" text-anchor="middle" font-size="220" font-family="Archivo Black, Arial Black, sans-serif" fill="#f7f3e8">${monogram}</text>
+    </svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
 function buildInviteUrl(clientId) {
   const normalized = String(clientId || "").trim();
   if (!normalized) {
@@ -448,6 +466,65 @@ function syncDeveloperProfile() {
   setText("developer-inline-id", developerDiscordId);
   setText("developer-short-id", developerDiscordId.slice(-6));
   setHtml("developer-id-code", `Discord ID // <strong>${developerDiscordId}</strong>`);
+  setText("developer-username", `@${developerName.toLowerCase()}`);
+
+  const avatar = document.getElementById("developer-avatar");
+  if (avatar) {
+    avatar.setAttribute("src", fallbackAvatarDataUri(developerName));
+    avatar.setAttribute("alt", `${developerName} Discord profile picture`);
+  }
+}
+
+function applyDeveloperProfile(profile) {
+  if (!profile) {
+    return;
+  }
+
+  const displayName = String(profile.displayName || profile.username || RUNTIME_CONFIG.developerName || DEFAULT_SITE_DATA.developerName).trim();
+  const username = String(profile.username || displayName).trim();
+  const userId = String(profile.id || RUNTIME_CONFIG.developerDiscordId || DEFAULT_SITE_DATA.developerDiscordId).trim();
+  const avatarUrl = String(profile.avatarUrl || "").trim();
+
+  setText("developer-name", `${displayName} </>`);
+  setText("developer-discord-id", userId);
+  setText("developer-short-id", userId.slice(-6));
+  setText("developer-username", `@${username}`);
+  setHtml("developer-id-code", `Discord ID // <strong>${userId}</strong>`);
+
+  const avatar = document.getElementById("developer-avatar");
+  if (avatar) {
+    avatar.setAttribute("src", avatarUrl || fallbackAvatarDataUri(displayName));
+    avatar.setAttribute("alt", `${displayName} Discord profile picture`);
+  }
+}
+
+async function loadDeveloperProfile() {
+  if (!document.getElementById("developer-avatar")) {
+    return;
+  }
+
+  applyDeveloperProfile({
+    id: RUNTIME_CONFIG.developerDiscordId || DEFAULT_SITE_DATA.developerDiscordId,
+    username: String(RUNTIME_CONFIG.developerName || DEFAULT_SITE_DATA.developerName).toLowerCase(),
+    displayName: RUNTIME_CONFIG.developerName || DEFAULT_SITE_DATA.developerName,
+    avatarUrl: "",
+  });
+
+  if (!isHttpContext() && !apiBaseUrl()) {
+    return;
+  }
+
+  try {
+    const response = await fetch(apiUrl("/developer-profile"), { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Failed to load developer profile: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    applyDeveloperProfile(payload);
+  } catch (error) {
+    return;
+  }
 }
 
 function initRevealMotion() {
@@ -546,6 +623,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadSiteData();
   syncDeveloperProfile();
   initRevealMotion();
+  await loadDeveloperProfile();
 
   if (state.apiAvailable) {
     window.setInterval(refreshStatus, 15000);

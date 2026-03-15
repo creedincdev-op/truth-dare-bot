@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -23,6 +24,13 @@ BOT_ENTRY = ROOT_DIR / "truth_dare_bot.py"
 STARTED_AT = time.monotonic()
 DEFAULT_SUPPORT_URL = "https://discord.gg/4fGf87kGhU"
 DEFAULT_GITHUB_URL = "https://github.com/creedincdev-op/truth-dare-bot"
+DEFAULT_DEVELOPER_DISCORD_ID = "1240237445841420302"
+DEVELOPER_PROFILE_TTL_SECONDS = 300
+DEVELOPER_PROFILE_CACHE: dict[str, object] = {
+    "user_id": None,
+    "fetched_at": 0.0,
+    "payload": None,
+}
 PAGE_ROUTES = {
     "/": WEB_DIR / "index.html",
     "/index.html": WEB_DIR / "index.html",
@@ -240,6 +248,62 @@ def build_github_url() -> str:
     return read_env("GITHUB_REPO_URL", DEFAULT_GITHUB_URL)
 
 
+def build_discord_avatar_url(user_id: str, avatar_hash: str | None) -> str | None:
+    normalized_user_id = str(user_id or "").strip()
+    normalized_hash = str(avatar_hash or "").strip()
+    if not normalized_user_id or not normalized_hash:
+        return None
+
+    extension = "gif" if normalized_hash.startswith("a_") else "png"
+    return f"https://cdn.discordapp.com/avatars/{normalized_user_id}/{normalized_hash}.{extension}?size=512"
+
+
+def fetch_developer_profile() -> dict[str, object]:
+    user_id = read_env("DEVELOPER_DISCORD_ID", DEFAULT_DEVELOPER_DISCORD_ID)
+    fallback_payload = {
+        "id": user_id,
+        "username": "YUVRAJ",
+        "displayName": "YUVRAJ",
+        "avatarUrl": None,
+    }
+
+    cached_user_id = str(DEVELOPER_PROFILE_CACHE.get("user_id") or "")
+    cached_payload = DEVELOPER_PROFILE_CACHE.get("payload")
+    cached_fetched_at = float(DEVELOPER_PROFILE_CACHE.get("fetched_at") or 0.0)
+    if cached_user_id == user_id and cached_payload and (time.monotonic() - cached_fetched_at) < DEVELOPER_PROFILE_TTL_SECONDS:
+        return cached_payload  # type: ignore[return-value]
+
+    token = read_env("BOT_TOKEN") or read_env("DISCORD_TOKEN")
+    if not token:
+        return fallback_payload
+
+    request = Request(
+        f"https://discord.com/api/v10/users/{user_id}",
+        headers={
+            "Authorization": f"Bot {token}",
+            "User-Agent": "truth-dare-bot-site/1.0",
+        },
+    )
+
+    try:
+        with urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return fallback_payload
+
+    resolved_payload = {
+        "id": str(payload.get("id") or user_id),
+        "username": str(payload.get("username") or "YUVRAJ"),
+        "displayName": str(payload.get("global_name") or payload.get("username") or "YUVRAJ"),
+        "avatarUrl": build_discord_avatar_url(str(payload.get("id") or user_id), payload.get("avatar")),
+    }
+
+    DEVELOPER_PROFILE_CACHE["user_id"] = user_id
+    DEVELOPER_PROFILE_CACHE["fetched_at"] = time.monotonic()
+    DEVELOPER_PROFILE_CACHE["payload"] = resolved_payload
+    return resolved_payload
+
+
 def build_site_payload(supervisor_state: dict[str, object]) -> dict[str, object]:
     prompt_summary = load_prompt_pool_summary()
     client_id = read_env("DISCORD_CLIENT_ID", "") or None
@@ -357,6 +421,10 @@ class HealthHandler(BaseHTTPRequestHandler):
 
         if request_path == "/site-data":
             self._send_json(build_site_payload(self.supervisor_state), include_body=include_body)
+            return
+
+        if request_path == "/developer-profile":
+            self._send_json(fetch_developer_profile(), include_body=include_body)
             return
 
         if request_path in PAGE_ROUTES:
