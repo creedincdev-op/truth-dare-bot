@@ -84,16 +84,16 @@ AI_PARANOIA_BATCH_SIZE = max(3, int(os.getenv("AI_PARANOIA_BATCH_SIZE", "6")))
 AI_PARANOIA_CACHE_TARGET = max(AI_PARANOIA_BATCH_SIZE, int(os.getenv("AI_PARANOIA_CACHE_TARGET", "18")))
 CONTROL_REPLY_TTL_SECONDS = max(8, int(os.getenv("CONTROL_REPLY_TTL_SECONDS", "20")))
 AI_CACHE_TARGETS = {
-    "truth": 120,
-    "dare": 160,
-    "never_have_i_ever": 80,
-    "paranoia": 120,
+    "truth": 180,
+    "dare": 260,
+    "never_have_i_ever": 120,
+    "paranoia": 180,
 }
 AI_BATCH_SIZES = {
-    "truth": 12,
-    "dare": 12,
-    "never_have_i_ever": 8,
-    "paranoia": 8,
+    "truth": 18,
+    "dare": 20,
+    "never_have_i_ever": 12,
+    "paranoia": 12,
 }
 AI_GAME_SPECS: dict[str, dict[str, tuple[str, ...] | str]] = {
     "truth": {
@@ -855,6 +855,315 @@ def extend_with_server_reference_prompts(prompts: list[PromptEntry]) -> list[Pro
                 weight=1.09,
                 server_only=True,
             )
+
+    # Expand the high-performing Discord-server pack with curated grouped prompts.
+    truth_template_sets = {
+        "PG": {
+            "category": "social",
+            "tone": "social",
+            "people_prefixes": [
+                "Which person in this server",
+                "Who here",
+            ],
+            "people_endings": [
+                "would read your real mood from one message",
+                "would spot your fake calm first",
+                "would expose your typing panic the fastest",
+                "would make you instantly fix your grammar if they replied",
+                "could guess what kind of day you are having from one reply",
+                "would make you over-explain yourself more than needed",
+            ],
+            "behavior_stems": [
+                "What about your behavior in this server",
+                "Which part of your vibe in this server",
+            ],
+            "behavior_endings": [
+                "gives away your real mood first",
+                "makes you replay your own messages later",
+                "feels way too obvious to people who know you",
+                "makes you look more suspiciously online than you realize",
+            ],
+        },
+        "PG13": {
+            "category": "bold",
+            "tone": "bold",
+            "people_prefixes": [
+                "Who in this server",
+                "Which person here",
+            ],
+            "people_endings": [
+                "could make you act smoother than you really are",
+                "would make you check the member list faster than normal",
+                "would make you type something bold and then instantly edit it",
+                "could make your attention span disappear in one reply",
+                "would have you pretending you do not care while clearly caring",
+            ],
+            "behavior_stems": [
+                "What is your most obvious tell when",
+                "What about your vibe in this server",
+            ],
+            "behavior_endings": [
+                "one specific person becomes active",
+                "you are trying to act normal and it is not working",
+                "you suddenly care a little too much about one reply",
+                "you are overthinking something harmless",
+            ],
+        },
+        "R": {
+            "category": "bold",
+            "tone": "bold",
+            "people_prefixes": [
+                "Who in this server",
+                "Which person here",
+                "Whose timing in this server",
+            ],
+            "people_endings": [
+                "could make you lose the ability to play it cool",
+                "would make you say something risky and pretend it was a joke",
+                "could make you fold while still trying to act unbothered",
+                "would make you act disciplined for five seconds and then fail",
+            ],
+        },
+    }
+
+    dare_template_sets = {
+        "PG": {
+            "category": "social",
+            "tone": "social",
+            "post": [
+                "a clean photo of the nearest object that matches this server's energy.",
+                "the safest camera-roll pic that still feels suspiciously on brand for you.",
+                "one harmless confession that begins with 'This server made me realize...'.",
+            ],
+            "send": [
+                "a fake patch note about your behavior in this server today.",
+                "a dramatic one-line update as if this server is a TV series.",
+                "the cleanest six-word review of this server you can think of.",
+            ],
+            "type": [
+                "a message in this channel like you are the narrator of a chaotic documentary.",
+                "your next message like a sports commentator covering this server.",
+                "a harmlessly dramatic apology for your most obvious server habit.",
+            ],
+            "tag": [
+                "someone here and give them a harmless movie title.",
+                "the funniest person you can think of and compliment them without using the word funny.",
+                "someone here and assign them the role of plot twist, narrator, or final boss.",
+            ],
+            "react": [
+                "the last five visible messages with your best-fitting emoji choices.",
+            ],
+        },
+        "PG13": {
+            "category": "bold",
+            "tone": "bold",
+            "post": [
+                "a safe selfie angle or hand pic and caption it like this server is judging you.",
+                "a fake episode title for the current server vibe.",
+                "the boldest clean caption you can get away with in this server.",
+            ],
+            "send": [
+                "a one-line message that sounds confident enough to worry people a little.",
+                "a clean suspicious sentence and refuse to explain it for one minute.",
+                "a harmlessly bold review of the current server vibe.",
+            ],
+            "type": [
+                "something that sounds like you know secret server lore and then add 'allegedly'.",
+                "a clean flex that feels slightly too confident for the current chat.",
+                "a fake warning label for anyone who underestimates your energy in this server.",
+            ],
+            "drop": [
+                "a voice-note style message in text as if you are exposing your own lore.",
+                "a one-line message that sounds too smooth to have been improvised.",
+            ],
+        },
+        "R": {
+            "category": "bold",
+            "tone": "bold",
+            "post": [
+                "one dangerous clean line and let the server sit with it.",
+                "the smoothest harmless caption you can think of and do not explain it.",
+            ],
+            "send": [
+                "a suspiciously calm message that sounds like there is lore behind it.",
+                "one bold but clean sentence that feels like late-night server energy.",
+            ],
+            "type": [
+                "a harmless line that sounds like you know exactly what you are doing.",
+                "one clean message that makes people think there is context missing.",
+            ],
+        },
+    }
+
+    nhie_template_sets = {
+        "PG": {
+            "category": "social",
+            "tone": "social",
+            "prefixes": [
+                "Never have I ever",
+            ],
+            "endings": [
+                "opened this server for one minute and stayed way too long.",
+                "checked the member list here for no real reason.",
+                "typed a full message in this server and deleted it.",
+                "laughed at the wrong thing in this server and hoped nobody noticed.",
+                "pretended I was busy while clearly watching this server in real time.",
+                "gone back through old messages here just to reconnect the lore.",
+            ],
+        },
+        "PG13": {
+            "category": "social",
+            "tone": "bold",
+            "prefixes": [
+                "Never have I ever",
+            ],
+            "endings": [
+                "smiled at my screen because of someone active in this server.",
+                "checked whether one specific person was online in this server.",
+                "changed my tone in this server because one person was around.",
+                "overthought one harmless reply from someone in this server.",
+                "pretended not to care about this server while obviously caring.",
+            ],
+        },
+        "R": {
+            "category": "bold",
+            "tone": "bold",
+            "prefixes": [
+                "Never have I ever",
+            ],
+            "endings": [
+                "typed something bold in this server and replaced it with something safer.",
+                "let one tiny interaction in this server affect my whole mood.",
+                "acted unbothered here while clearly spiraling a little.",
+                "stayed online in this server for one conversation I had no business waiting for.",
+            ],
+        },
+    }
+
+    paranoia_template_sets = {
+        "PG": {
+            "category": "social",
+            "tone": "social",
+            "prefixes": [
+                "Who here",
+                "Whose name comes to mind first for someone who",
+                "Who in this server",
+            ],
+            "endings": [
+                "would get exposed first by their own reaction history?",
+                "would make the funniest excuse after sending the wrong screenshot?",
+                "would accidentally create chaos and still act innocent after it?",
+                "would know the most server lore and deny all of it?",
+                "would panic first if the chat started asking for context?",
+                "would narrate this server like a full reality show?",
+            ],
+        },
+        "PG13": {
+            "category": "bold",
+            "tone": "bold",
+            "prefixes": [
+                "Who here",
+                "Whose name comes to mind first for someone who",
+                "Who in this server",
+            ],
+            "endings": [
+                "would act calm while obviously waiting for one specific reply?",
+                "would post something subtle just for one person to notice?",
+                "would overthink one clean flirty message the longest?",
+                "would make the whole server start guessing with one suspicious sentence?",
+                "would pretend not to care and fail immediately?",
+            ],
+        },
+        "R": {
+            "category": "bold",
+            "tone": "bold",
+            "prefixes": [
+                "Who here",
+                "Whose name comes to mind first for someone who",
+                "Who in this server",
+            ],
+            "endings": [
+                "would create harmless tension with almost no effort?",
+                "would act the smoothest until it was time to actually be smooth?",
+                "would make the biggest late-night spiral happen with one line?",
+                "would look the calmest while hiding the most chaos?",
+            ],
+        },
+    }
+
+    for rating, template_set in truth_template_sets.items():
+        for prefix in template_set.get("people_prefixes", []):
+            for ending in template_set.get("people_endings", []):
+                append_prompt(
+                    server_prompts,
+                    seen_keys,
+                    game="truth",
+                    category=template_set["category"],
+                    rating=rating,
+                    text=f"{prefix} {ending}".rstrip("?") + "?",
+                    tone=template_set["tone"],
+                    weight=1.06,
+                    server_only=True,
+                )
+        for stem in template_set.get("behavior_stems", []):
+            for ending in template_set.get("behavior_endings", []):
+                append_prompt(
+                    server_prompts,
+                    seen_keys,
+                    game="truth",
+                    category=template_set["category"],
+                    rating=rating,
+                    text=f"{stem} {ending}?",
+                    tone=template_set["tone"],
+                    weight=1.06,
+                    server_only=True,
+                )
+
+    for rating, template_set in dare_template_sets.items():
+        for action in ("post", "send", "type", "drop", "tag", "react"):
+            for ending in template_set.get(action, []):
+                verb = action.capitalize() if action != "react" else "React to"
+                append_prompt(
+                    server_prompts,
+                    seen_keys,
+                    game="dare",
+                    category=template_set["category"],
+                    rating=rating,
+                    text=f"{verb} {ending}",
+                    tone=template_set["tone"],
+                    weight=1.06,
+                    server_only=True,
+                )
+
+    for rating, template_set in nhie_template_sets.items():
+        for prefix in template_set["prefixes"]:
+            for ending in template_set["endings"]:
+                append_prompt(
+                    server_prompts,
+                    seen_keys,
+                    game="never_have_i_ever",
+                    category=template_set["category"],
+                    rating=rating,
+                    text=f"{prefix} {ending}",
+                    tone=template_set["tone"],
+                    weight=1.05,
+                    server_only=True,
+                )
+
+    for rating, template_set in paranoia_template_sets.items():
+        for prefix in template_set["prefixes"]:
+            for ending in template_set["endings"]:
+                append_prompt(
+                    server_prompts,
+                    seen_keys,
+                    game="paranoia",
+                    category=template_set["category"],
+                    rating=rating,
+                    text=f"{prefix} {ending}".rstrip("?") + "?",
+                    tone=template_set["tone"],
+                    weight=1.07,
+                    server_only=True,
+                )
 
     return server_prompts
 
@@ -2416,7 +2725,8 @@ def build_dev_help_view(owner_id: int) -> ControlHelpCard:
             ("<<clearhistory server", "Reset this server's repeat memory and local freshness."),
             ("<<clearhistory user <id>", "Reset one user's global repeat memory."),
             ("<<clearhistory global", "Reset all persistent repeat memory."),
-            (f"<<fillparanoia [3-{AI_PARANOIA_BATCH_SIZE if AI_PARANOIA_BATCH_SIZE > 3 else 12}]", "Add AI paranoia prompts."),
+            ("<<fillallai [count]", "Add AI prompts across Truth, Dare, Never Ever, and Paranoia."),
+            (f"<<fillparanoia [3-{AI_PARANOIA_BATCH_SIZE if AI_PARANOIA_BATCH_SIZE > 3 else 12}]", "Add AI paranoia prompts only."),
             ("<<sync guild | global", "Sync slash commands."),
             ("<<sendmsg <text>", "Send a custom message into the current channel."),
         ],
@@ -2861,6 +3171,26 @@ async def prefix_fillparanoia(ctx: commands.Context[Any], batch_size: str | None
         embed=discord.Embed(
             title="AI paranoia refresh done",
             description=f"Added **{added}** prompts.",
+            color=0x57F287,
+        ),
+    )
+
+
+@bot.command(name="fillallai")
+async def prefix_fillallai(ctx: commands.Context[Any], batch_size: str | None = None) -> None:
+    if ctx.prefix != "<<":
+        return
+    if not await ensure_dev_ctx(ctx):
+        return
+    size: int | None = None
+    if batch_size and batch_size.isdigit():
+        size = max(4, min(24, int(batch_size)))
+    added = await bot.refresh_ai_prompt_cache(batch_size=size)
+    await send_hidden_control_response(
+        ctx,
+        embed=discord.Embed(
+            title="AI all-mode refresh done",
+            description=f"Added **{added}** prompts across all core modes.",
             color=0x57F287,
         ),
     )
