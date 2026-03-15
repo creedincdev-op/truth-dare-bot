@@ -38,6 +38,8 @@ RATINGS = ["PG", "PG13", "R"]
 COFFEE_EMOJI = "\u2615"
 BRAIN_EMOJI = "\U0001F9E0"
 MADE_WITH_TAG = f"Made with {COFFEE_EMOJI} and {BRAIN_EMOJI} By Yuvraj"
+PUBLIC_WEBSITE_URL = "https://truth-dare-bot-iota.vercel.app/"
+SUPPORT_SERVER_URL = "https://discord.gg/4fGf87kGhU"
 BRANDED_GUILD_IDS = {
     573159553143930892,
     1418476529368825989,
@@ -176,6 +178,8 @@ class ParanoiaRound:
 class RuntimeSettings:
     disabled_guilds: set[int] = field(default_factory=set)
     disabled_channels: set[int] = field(default_factory=set)
+    dev_disabled_guilds: set[int] = field(default_factory=set)
+    dev_disabled_channels: set[int] = field(default_factory=set)
 
 
 paranoia_rounds: dict[str, ParanoiaRound] = {}
@@ -212,6 +216,25 @@ def read_env_int(*names: str) -> int | None:
         return int(raw)
     except ValueError:
         return None
+
+
+def build_invite_url() -> str | None:
+    client_id = read_env_int("DISCORD_CLIENT_ID", "APPLICATION_ID")
+    if client_id is None:
+        return None
+    permissions = discord.Permissions(
+        view_channel=True,
+        send_messages=True,
+        embed_links=True,
+        read_message_history=True,
+        manage_messages=True,
+        use_application_commands=True,
+    )
+    return discord.utils.oauth_url(
+        client_id,
+        permissions=permissions,
+        scopes=("bot", "applications.commands"),
+    )
 
 
 def normalize_text(value: str | None) -> str:
@@ -262,6 +285,8 @@ def load_runtime_settings() -> RuntimeSettings:
     return RuntimeSettings(
         disabled_guilds={int(value) for value in payload.get("disabled_guilds", [])},
         disabled_channels={int(value) for value in payload.get("disabled_channels", [])},
+        dev_disabled_guilds={int(value) for value in payload.get("dev_disabled_guilds", [])},
+        dev_disabled_channels={int(value) for value in payload.get("dev_disabled_channels", [])},
     )
 
 
@@ -272,6 +297,8 @@ def save_runtime_settings(settings: RuntimeSettings) -> None:
             {
                 "disabled_guilds": sorted(settings.disabled_guilds),
                 "disabled_channels": sorted(settings.disabled_channels),
+                "dev_disabled_guilds": sorted(settings.dev_disabled_guilds),
+                "dev_disabled_channels": sorted(settings.dev_disabled_channels),
             },
             indent=2,
         ),
@@ -279,10 +306,25 @@ def save_runtime_settings(settings: RuntimeSettings) -> None:
     )
 
 
+def get_disable_state(
+    settings: RuntimeSettings,
+    guild_id: int | None,
+    channel_id: int | None,
+) -> tuple[str | None, str | None]:
+    if guild_id is not None and guild_id in settings.dev_disabled_guilds:
+        return "server", "developer"
+    if channel_id is not None and channel_id in settings.dev_disabled_channels:
+        return "channel", "developer"
+    if guild_id is not None and guild_id in settings.disabled_guilds:
+        return "server", "admin"
+    if channel_id is not None and channel_id in settings.disabled_channels:
+        return "channel", "admin"
+    return None, None
+
+
 def is_location_disabled(settings: RuntimeSettings, guild_id: int | None, channel_id: int | None) -> bool:
-    return (guild_id is not None and guild_id in settings.disabled_guilds) or (
-        channel_id is not None and channel_id in settings.disabled_channels
-    )
+    scope, _source = get_disable_state(settings, guild_id, channel_id)
+    return scope is not None
 
 
 def build_prompt_signature(text: str) -> set[str]:
@@ -1125,11 +1167,17 @@ def build_paranoia_failure_embed() -> discord.Embed:
     return embed
 
 
-def build_disabled_embed(scope: str) -> discord.Embed:
+def build_disabled_embed(scope: str, source: str) -> discord.Embed:
     label = "this server" if scope == "server" else "this channel"
+    title = "Developer lock active" if source == "developer" else "Bot disabled here"
+    description = (
+        f"This bot is developer-locked in {label}. Only a developer can re-enable it."
+        if source == "developer"
+        else f"This bot is currently disabled in {label}."
+    )
     return discord.Embed(
-        title="Bot disabled here",
-        description=f"This bot is currently disabled in {label}.",
+        title=title,
+        description=description,
         color=0xED4245,
     )
 
@@ -1137,8 +1185,10 @@ def build_disabled_embed(scope: str) -> discord.Embed:
 def build_control_status_embed(bot_instance: "TruthDareBot", interaction: discord.Interaction) -> discord.Embed:
     settings = bot_instance.runtime_settings
     scope_lines = [
-        f"Server disabled: **{'Yes' if interaction.guild_id in settings.disabled_guilds else 'No'}**",
-        f"Channel disabled: **{'Yes' if (interaction.channel_id or 0) in settings.disabled_channels else 'No'}**",
+        f"Admin server disabled: **{'Yes' if interaction.guild_id in settings.disabled_guilds else 'No'}**",
+        f"Admin channel disabled: **{'Yes' if (interaction.channel_id or 0) in settings.disabled_channels else 'No'}**",
+        f"Developer server lock: **{'Yes' if interaction.guild_id in settings.dev_disabled_guilds else 'No'}**",
+        f"Developer channel lock: **{'Yes' if (interaction.channel_id or 0) in settings.dev_disabled_channels else 'No'}**",
         f"Developer IDs loaded: **{len(bot_instance.dev_user_ids)}**",
         f"AI paranoia refresh: **{'ON' if bot_instance.ai_prompt_service.enabled else 'OFF'}**",
     ]
@@ -1162,17 +1212,17 @@ def build_control_status_embed(bot_instance: "TruthDareBot", interaction: discor
 
 
 async def check_bot_enabled(interaction: discord.Interaction) -> bool:
-    if is_location_disabled(bot.runtime_settings, interaction.guild_id, interaction.channel_id):
-        scope = "server" if interaction.guild_id in bot.runtime_settings.disabled_guilds else "channel"
-        await interaction.response.send_message(embed=build_disabled_embed(scope), ephemeral=True)
+    scope, source = get_disable_state(bot.runtime_settings, interaction.guild_id, interaction.channel_id)
+    if scope is not None and source is not None:
+        await interaction.response.send_message(embed=build_disabled_embed(scope, source), ephemeral=True)
         return False
     return True
 
 
 async def check_button_enabled(interaction: discord.Interaction) -> bool:
-    if is_location_disabled(bot.runtime_settings, interaction.guild_id, interaction.channel_id):
-        scope = "server" if interaction.guild_id in bot.runtime_settings.disabled_guilds else "channel"
-        await interaction.response.send_message(embed=build_disabled_embed(scope), ephemeral=True)
+    scope, source = get_disable_state(bot.runtime_settings, interaction.guild_id, interaction.channel_id)
+    if scope is not None and source is not None:
+        await interaction.response.send_message(embed=build_disabled_embed(scope, source), ephemeral=True)
         return False
     return True
 
@@ -1808,6 +1858,11 @@ async def tod_stats(interaction: discord.Interaction) -> None:
     await interaction.followup.send(content, ephemeral=True)
 
 
+@bot.tree.command(name="help", description="Show the bot command list, website, and support links.")
+async def help_command(interaction: discord.Interaction) -> None:
+    await interaction.response.send_message(view=build_public_help_view(), allowed_mentions=discord.AllowedMentions.none())
+
+
 async def safe_delete_message(message: discord.Message) -> None:
     try:
         await message.delete()
@@ -1824,60 +1879,151 @@ def parse_scope(value: str | None) -> str | None:
     return None
 
 
-def build_admin_help_embed() -> discord.Embed:
-    embed = discord.Embed(
+class AutoHideControlCard(discord.ui.LayoutView):
+    def __init__(self, owner_id: int, *, ttl: int = CONTROL_REPLY_TTL_SECONDS) -> None:
+        super().__init__(timeout=None)
+        self.owner_id = owner_id
+        self.ttl = ttl
+        self.message: discord.Message | None = None
+        self.delete_task: asyncio.Task[None] | None = None
+        self.keep_button = discord.ui.Button(label="Keep", emoji="📌", style=discord.ButtonStyle.secondary)
+        self.keep_button.callback = self.keep_callback
+
+    def bind_message(self, message: discord.Message) -> None:
+        self.message = message
+        self.delete_task = asyncio.create_task(self.auto_delete())
+
+    async def auto_delete(self) -> None:
+        await asyncio.sleep(self.ttl)
+        if self.keep_button.disabled or self.message is None:
+            return
+        try:
+            await self.message.delete()
+        except discord.HTTPException:
+            pass
+
+    async def keep_callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Only the requester can keep this panel.", ephemeral=True)
+            return
+        self.keep_button.label = "Kept"
+        self.keep_button.emoji = "✅"
+        self.keep_button.style = discord.ButtonStyle.success
+        self.keep_button.disabled = True
+        await interaction.response.edit_message(view=self)
+
+
+class ControlHelpCard(AutoHideControlCard):
+    def __init__(
+        self,
+        owner_id: int,
+        *,
+        title: str,
+        description: str,
+        commands_list: list[tuple[str, str]],
+        notes: list[str],
+        accent_color: int,
+    ) -> None:
+        super().__init__(owner_id)
+        container = discord.ui.Container(accent_color=accent_color)
+        container.add_item(discord.ui.TextDisplay(f"## {title}"))
+        container.add_item(discord.ui.TextDisplay(description))
+        container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+        command_lines = "\n".join(f"-# `{name}` — {desc}" for name, desc in commands_list)
+        container.add_item(discord.ui.TextDisplay(f"**Commands**\n{command_lines}"))
+        note_lines = "\n".join(f"-# {note}" for note in notes)
+        container.add_item(discord.ui.TextDisplay(f"**Notes**\n{note_lines}"))
+        row = discord.ui.ActionRow()
+        row.add_item(self.keep_button)
+        container.add_item(row)
+        self.add_item(container)
+
+
+def build_admin_help_view(owner_id: int) -> ControlHelpCard:
+    return ControlHelpCard(
+        owner_id,
         title="Admin controls",
-        description="These controls auto-hide in chat and work only for server admins.",
-        color=0x5865F2,
+        description="Hidden admin controls for this server. These auto-hide unless you tap Keep.",
+        commands_list=[
+            ("<adminhelp", "Show this admin help panel."),
+            ("<adminstatus", "Show current admin/developer disable state."),
+            ("<disableall channel", "Disable the bot in this channel."),
+            ("<disableall server", "Disable the bot in this server."),
+            ("<enableall channel", "Re-enable this channel unless a developer lock exists."),
+            ("<enableall server", "Re-enable this server unless a developer lock exists."),
+            ("<clearhistory channel", "Reset repeat memory for this channel."),
+            ("<clearhistory server", "Reset repeat memory for this server."),
+        ],
+        notes=[
+            "Requires Manage Server.",
+            "Developer locks cannot be bypassed by admin enable commands.",
+        ],
+        accent_color=0x5865F2,
     )
-    embed.add_field(
-        name="<adminhelp",
-        value="Show this admin help panel.",
-        inline=False,
-    )
-    embed.add_field(
-        name="<disableall channel | server",
-        value="Disable the bot in the current channel or entire server.",
-        inline=False,
-    )
-    embed.add_field(
-        name="<enableall channel | server",
-        value="Re-enable the bot in the current channel or entire server.",
-        inline=False,
-    )
-    embed.add_field(
-        name="<adminstatus",
-        value="Show current disable state and prompt totals.",
-        inline=False,
-    )
-    embed.set_footer(text="Use in a server where you have Manage Server.")
-    return embed
 
 
-def build_dev_help_embed() -> discord.Embed:
-    embed = discord.Embed(
+def build_dev_help_view(owner_id: int) -> ControlHelpCard:
+    return ControlHelpCard(
+        owner_id,
         title="Developer controls",
-        description="Hidden developer controls for runtime, prompt packs, and sync.",
-        color=0xF1C40F,
+        description="Hidden developer runtime controls. These auto-hide unless you tap Keep.",
+        commands_list=[
+            ("<<devhelp", "Show this developer help panel."),
+            ("<<devstatus", "Show admin/developer disable state."),
+            ("<<disableall channel", "Developer-lock this channel."),
+            ("<<disableall server", "Developer-lock this server."),
+            ("<<enableall channel", "Remove the developer lock from this channel."),
+            ("<<enableall server", "Remove the developer lock from this server."),
+            ("<<reloadprompts", "Reload prompt packs from disk."),
+            ("<<clearhistory channel", "Reset repeat memory for this channel."),
+            ("<<clearhistory server", "Reset repeat memory for this server."),
+            (f"<<fillparanoia [3-{AI_PARANOIA_BATCH_SIZE if AI_PARANOIA_BATCH_SIZE > 3 else 12}]", "Add AI paranoia prompts."),
+            ("<<sync guild | global", "Sync slash commands."),
+            ("<<sendmsg <text>", "Send a custom message into the current channel."),
+        ],
+        notes=[
+            "Locked to your developer user IDs.",
+            "Developer disable commands override admin enable commands.",
+        ],
+        accent_color=0xF1C40F,
     )
-    lines = [
-        "<<devhelp",
-        "<<devstatus",
-        "<<disableall channel | server",
-        "<<enableall channel | server",
-        "<<reloadprompts",
-        "<<clearhistory channel | server",
-        f"<<fillparanoia [3-{AI_PARANOIA_BATCH_SIZE if AI_PARANOIA_BATCH_SIZE > 3 else 12}]",
-        "<<sync guild | global",
-    ]
-    embed.add_field(name="Commands", value="\n".join(f"`{line}`" for line in lines), inline=False)
-    embed.add_field(
-        name="Notes",
-        value="Use `<<` only. Replies auto-hide in chat and are locked to your user ID.",
-        inline=False,
+
+
+def build_public_help_view() -> discord.ui.LayoutView:
+    view = discord.ui.LayoutView(timeout=None)
+    container = discord.ui.Container(accent_color=0x5865F2)
+    container.add_item(discord.ui.TextDisplay("## Truth OR Dare Bot"))
+    container.add_item(
+        discord.ui.TextDisplay(
+            "Play Truth, Dare, Never Have I Ever, and Paranoia with the main public commands below."
+        )
     )
-    embed.set_footer(text="Developer locked to your user ID.")
-    return embed
+    container.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+    container.add_item(
+        discord.ui.TextDisplay(
+            "**Slash commands**\n"
+            "-# `/truthordare` — Truth, Dare, or Random panel.\n"
+            "-# `/truth` — truth-only prompt.\n"
+            "-# `/dare` — dare-only prompt.\n"
+            "-# `/neverever` — Never Have I Ever prompt.\n"
+            "-# `/paranoia` — send a Paranoia DM round.\n"
+            "-# `/todstats` — prompt pool stats."
+        )
+    )
+    container.add_item(
+        discord.ui.TextDisplay(
+            f"**Links**\n-# Website: {PUBLIC_WEBSITE_URL}\n-# Support: {SUPPORT_SERVER_URL}"
+        )
+    )
+    row = discord.ui.ActionRow()
+    row.add_item(discord.ui.Button(label="Website", emoji="🌐", url=PUBLIC_WEBSITE_URL))
+    row.add_item(discord.ui.Button(label="Support", emoji="💬", url=SUPPORT_SERVER_URL))
+    invite_url = build_invite_url()
+    if invite_url:
+        row.add_item(discord.ui.Button(label="Invite", emoji="➕", url=invite_url))
+    container.add_item(row)
+    view.add_item(container)
+    return view
 
 
 async def send_hidden_control_response(
@@ -1885,18 +2031,27 @@ async def send_hidden_control_response(
     *,
     embed: discord.Embed | None = None,
     content: str | None = None,
+    view: discord.ui.View | discord.ui.LayoutView | None = None,
     ttl: int = CONTROL_REPLY_TTL_SECONDS,
+    allowed_mentions: discord.AllowedMentions | None = None,
 ) -> None:
     await safe_delete_message(ctx.message)
-    kwargs: dict[str, Any] = {
-        "delete_after": ttl,
-        "allowed_mentions": discord.AllowedMentions.none(),
-    }
-    if embed is not None:
-        kwargs["embed"] = embed
-    if content is not None:
-        kwargs["content"] = content
+    mentions = allowed_mentions or discord.AllowedMentions.none()
     try:
+        if view is not None:
+            message = await ctx.channel.send(content=content, view=view, allowed_mentions=mentions)
+            if isinstance(view, AutoHideControlCard):
+                view.bind_message(message)
+            return
+
+        kwargs: dict[str, Any] = {
+            "delete_after": ttl,
+            "allowed_mentions": mentions,
+        }
+        if embed is not None:
+            kwargs["embed"] = embed
+        if content is not None:
+            kwargs["content"] = content
         await ctx.channel.send(**kwargs)
     except discord.HTTPException:
         pass
@@ -1926,12 +2081,13 @@ async def prefix_adminhelp(ctx: commands.Context[Any]) -> None:
         return
     if not await ensure_admin_ctx(ctx):
         return
-    await send_hidden_control_response(ctx, embed=build_admin_help_embed())
+    await send_hidden_control_response(ctx, view=build_admin_help_view(ctx.author.id))
 
 
 @bot.command(name="disableall")
 async def prefix_disableall(ctx: commands.Context[Any], scope: str | None = None) -> None:
-    if ctx.prefix == "<<":
+    developer_mode = ctx.prefix == "<<"
+    if developer_mode:
         if not await ensure_dev_ctx(ctx):
             return
     else:
@@ -1940,7 +2096,8 @@ async def prefix_disableall(ctx: commands.Context[Any], scope: str | None = None
 
     parsed_scope = parse_scope(scope)
     if parsed_scope is None:
-        await send_hidden_control_response(ctx, content="Use `<disableall channel` or `<disableall server`.")
+        prefix = "<<" if developer_mode else "<"
+        await send_hidden_control_response(ctx, content=f"Use `{prefix}disableall channel` or `{prefix}disableall server`.")
         return
 
     if ctx.guild is None:
@@ -1948,23 +2105,30 @@ async def prefix_disableall(ctx: commands.Context[Any], scope: str | None = None
         return
 
     if parsed_scope == "server":
-        bot.runtime_settings.disabled_guilds.add(ctx.guild.id)
+        target_set = bot.runtime_settings.dev_disabled_guilds if developer_mode else bot.runtime_settings.disabled_guilds
+        target_set.add(ctx.guild.id)
     else:
-        bot.runtime_settings.disabled_channels.add(ctx.channel.id)
+        target_set = bot.runtime_settings.dev_disabled_channels if developer_mode else bot.runtime_settings.disabled_channels
+        target_set.add(ctx.channel.id)
     save_runtime_settings(bot.runtime_settings)
     await send_hidden_control_response(
         ctx,
         embed=discord.Embed(
-            title="Bot disabled",
-            description=f"Disabled in **{'this server' if parsed_scope == 'server' else 'this channel'}**.",
-            color=0xED4245,
+            title="Developer lock enabled" if developer_mode else "Bot disabled",
+            description=(
+                f"Developer-locked **{'this server' if parsed_scope == 'server' else 'this channel'}**."
+                if developer_mode
+                else f"Disabled in **{'this server' if parsed_scope == 'server' else 'this channel'}**."
+            ),
+            color=0xED4245 if developer_mode else 0xF39C12,
         ),
     )
 
 
 @bot.command(name="enableall")
 async def prefix_enableall(ctx: commands.Context[Any], scope: str | None = None) -> None:
-    if ctx.prefix == "<<":
+    developer_mode = ctx.prefix == "<<"
+    if developer_mode:
         if not await ensure_dev_ctx(ctx):
             return
     else:
@@ -1973,23 +2137,44 @@ async def prefix_enableall(ctx: commands.Context[Any], scope: str | None = None)
 
     parsed_scope = parse_scope(scope)
     if parsed_scope is None:
-        await send_hidden_control_response(ctx, content="Use `<enableall channel` or `<enableall server`.")
+        prefix = "<<" if developer_mode else "<"
+        await send_hidden_control_response(ctx, content=f"Use `{prefix}enableall channel` or `{prefix}enableall server`.")
         return
 
     if ctx.guild is None:
         await send_hidden_control_response(ctx, content="This command only works in servers.")
         return
 
+    if not developer_mode:
+        if parsed_scope == "server" and ctx.guild.id in bot.runtime_settings.dev_disabled_guilds:
+            await send_hidden_control_response(
+                ctx,
+                content="Developer lock active on this server. Use `<<enableall server` to remove it.",
+            )
+            return
+        if parsed_scope == "channel" and ctx.channel.id in bot.runtime_settings.dev_disabled_channels:
+            await send_hidden_control_response(
+                ctx,
+                content="Developer lock active on this channel. Use `<<enableall channel` to remove it.",
+            )
+            return
+
     if parsed_scope == "server":
-        bot.runtime_settings.disabled_guilds.discard(ctx.guild.id)
+        target_set = bot.runtime_settings.dev_disabled_guilds if developer_mode else bot.runtime_settings.disabled_guilds
+        target_set.discard(ctx.guild.id)
     else:
-        bot.runtime_settings.disabled_channels.discard(ctx.channel.id)
+        target_set = bot.runtime_settings.dev_disabled_channels if developer_mode else bot.runtime_settings.disabled_channels
+        target_set.discard(ctx.channel.id)
     save_runtime_settings(bot.runtime_settings)
     await send_hidden_control_response(
         ctx,
         embed=discord.Embed(
-            title="Bot enabled",
-            description=f"Enabled in **{'this server' if parsed_scope == 'server' else 'this channel'}**.",
+            title="Developer lock removed" if developer_mode else "Bot enabled",
+            description=(
+                f"Removed developer lock from **{'this server' if parsed_scope == 'server' else 'this channel'}**."
+                if developer_mode
+                else f"Enabled in **{'this server' if parsed_scope == 'server' else 'this channel'}**."
+            ),
             color=0x57F287,
         ),
     )
@@ -2011,7 +2196,7 @@ async def prefix_devhelp(ctx: commands.Context[Any]) -> None:
         return
     if not await ensure_dev_ctx(ctx):
         return
-    await send_hidden_control_response(ctx, embed=build_dev_help_embed())
+    await send_hidden_control_response(ctx, view=build_dev_help_view(ctx.author.id))
 
 
 @bot.command(name="devstatus")
@@ -2039,13 +2224,19 @@ async def prefix_reloadprompts(ctx: commands.Context[Any]) -> None:
 
 @bot.command(name="clearhistory")
 async def prefix_clearhistory(ctx: commands.Context[Any], scope: str | None = None) -> None:
-    if ctx.prefix != "<<":
-        return
-    if not await ensure_dev_ctx(ctx):
-        return
+    developer_mode = ctx.prefix == "<<"
+    if developer_mode:
+        if not await ensure_dev_ctx(ctx):
+            return
+    else:
+        if ctx.prefix != "<":
+            return
+        if not await ensure_admin_ctx(ctx):
+            return
     parsed_scope = parse_scope(scope)
     if parsed_scope is None:
-        await send_hidden_control_response(ctx, content="Use `<<clearhistory channel` or `<<clearhistory server`.")
+        prefix = "<<" if developer_mode else "<"
+        await send_hidden_control_response(ctx, content=f"Use `{prefix}clearhistory channel` or `{prefix}clearhistory server`.")
         return
     if parsed_scope == "server":
         bot.prompt_engine.clear_history(guild_id=ctx.guild.id if ctx.guild else None)
@@ -2059,6 +2250,36 @@ async def prefix_clearhistory(ctx: commands.Context[Any], scope: str | None = No
             color=0x57F287,
         ),
     )
+
+
+@bot.command(name="sendmsg")
+async def prefix_sendmsg(ctx: commands.Context[Any], *, message: str | None = None) -> None:
+    if ctx.prefix != "<<":
+        return
+    if not await ensure_dev_ctx(ctx):
+        return
+    if not message or not message.strip():
+        await send_hidden_control_response(ctx, content="Use `<<sendmsg <message>`.")
+        return
+
+    await safe_delete_message(ctx.message)
+    try:
+        await ctx.channel.send(
+            message.strip(),
+            allowed_mentions=discord.AllowedMentions(
+                users=True,
+                roles=True,
+                everyone=False,
+                replied_user=False,
+            ),
+        )
+        await ctx.channel.send(
+            "Developer message sent.",
+            delete_after=6,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except discord.HTTPException:
+        pass
 
 
 @bot.command(name="fillparanoia")
