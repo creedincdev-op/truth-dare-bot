@@ -1048,7 +1048,7 @@ def build_paranoia_dm_details(round_data: ParanoiaRound, *, answered: bool = Fal
     hint_line = (
         "-# Locked in. The public reveal already has your anonymous answer."
         if answered
-        else "-# Reply once. Keep it funny, clean, and server-safe."
+        else "-# Keep it mysterious, funny, and non-controversial."
     )
     return "\n".join(
         [
@@ -1860,6 +1860,8 @@ async def tod_stats(interaction: discord.Interaction) -> None:
 
 @bot.tree.command(name="help", description="Show the bot command list, website, and support links.")
 async def help_command(interaction: discord.Interaction) -> None:
+    if not await check_bot_enabled(interaction):
+        return
     await interaction.response.send_message(view=build_public_help_view(), allowed_mentions=discord.AllowedMentions.none())
 
 
@@ -2272,11 +2274,6 @@ async def prefix_sendmsg(ctx: commands.Context[Any], *, message: str | None = No
                 everyone=False,
                 replied_user=False,
             ),
-        )
-        await ctx.channel.send(
-            "Developer message sent.",
-            delete_after=6,
-            allowed_mentions=discord.AllowedMentions.none(),
         )
     except discord.HTTPException:
         pass
